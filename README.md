@@ -55,7 +55,13 @@ A CHANGELOG.md tracking what changed per version — Keep a Changelog is a widel
 # GYM AI API
 Gym AI is an AI powered Gym assistant/coach for people who workout at the gym. It helps them track their progress and gives them information they need about exercises.
 
-## Quick Start
+## Live Deployment
+The fast API server is deployed on a free instance on [Render](https://render.com). This means that the service spins down with inactivity and would require a few mins to spin back up when you visit the URL or make request
+
+Live URL: https://gym-ai-backend-h26r.onrender.com
+Live API Docs: [Docs](https://gym-ai-backend-h26r.onrender.com/docs)
+
+## Quick Start (How ro run locally)
 - Clone the repository
 - Ensure that your have python and UV installed on your system
 - From the root directory, run ``uv add`` to install dependencies
@@ -63,13 +69,14 @@ Gym AI is an AI powered Gym assistant/coach for people who workout at the gym. I
     If docker is installed, then simply run the command ``docker compose up -d`` to start up a postgres DB inside a container. 
     If you have Postgres installed then simply input it's connection details to the required variables in the
     .env file.
+- To populate Pinecone vector store, run ``uv run python -m app.services.rag.ingest``
 - To start the dev server, run ``uv run fastapi dev main.py``
 
 ## Configuration 
 Create a .env file in the root of the project and add the variables in .env.example nd populate your own values
 Some important modifications:
 
-- The project makes use of asyncpg driver to talk to the database. Therefore, you must add ``+asyncpg`` to the DATABASE_URL variable
+- The project makes use of psycopg driver to talk to the database. Therefore, you must add ``+psycopg`` to the DATABASE_URL variable
 
 ```
 postgresql+asyncpg://user:password@host/dbname
@@ -84,11 +91,15 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 ## API Docs
-Once the server is running successfully, in your browser, visit http://localhost:8000/docs to view the documented API routes
+Once the server is running successfully, in your browser, visit http://localhost:8000/docs to view the documented API routes or view live docs [here](https://gym-ai-backend-h26r.onrender.com/docs)
 
 ## Architecture
 
-## Database 
+### Server
+Python (FastAPI)
+### Vector store
+Pinecone
+### Database 
 PostgreSQL
 ### ORM
 SQLAlchemy
