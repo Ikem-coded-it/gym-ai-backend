@@ -1,5 +1,5 @@
 from typing import Annotated
-from app.schemas.workout import WorkoutResponse, WorkoutCreate
+from app.schemas.workout import WorkoutResponse, WorkoutCreate, WorkoutWithExercisesResponse
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.logger import logger
@@ -35,12 +35,19 @@ async def create_workout(workout: WorkoutCreate, current_user: CurrentUser, db: 
 
 @router.get(
     "/",
-    response_model=list[WorkoutResponse],
+    response_model=list[WorkoutWithExercisesResponse],
     status_code=status.HTTP_200_OK,
     summary="Get all workouts",
     description="Get all workouts for the current user",
 )
 async def get_workouts(current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
     logger.info(f"Getting all workouts for user: {current_user.id}")
-    workouts = await db.execute(select(workout_model).where(workout_model.user_id == current_user.id))
-    return [WorkoutResponse.model_validate(workout) for workout in workouts.scalars().all()]
+    workouts = await db.execute(
+        select(workout_model)
+        .where(workout_model.user_id == current_user.id)
+        .options(selectinload(workout_model.exercises))
+    )
+    return [
+        WorkoutWithExercisesResponse.model_validate(workout)
+        for workout in workouts.scalars().all()
+    ]

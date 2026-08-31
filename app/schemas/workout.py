@@ -1,8 +1,10 @@
 # app/schemas/workout.py
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from uuid import UUID
 from typing import Optional
+
+from app.schemas.workout_exercise import WorkoutExerciseResponse
 
 # Base — shared fields used by other schemas
 class WorkoutBase(BaseModel):
@@ -27,3 +29,6 @@ class WorkoutResponse(WorkoutBase):
      user_id: UUID
      created_at: datetime
      updated_at: datetime
+
+class WorkoutWithExercisesResponse(WorkoutResponse):
+    exercises: list[WorkoutExerciseResponse] = []
