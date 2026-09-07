@@ -1,17 +1,20 @@
-# app/schemas/user.py
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
-from datetime import datetime
+# app/schemas/chat.py
+from pydantic import BaseModel, Field
 from uuid import UUID
-from typing import Optional
+
+from app.schemas.message import MessageResponse
+
 
 class ChatBase(BaseModel):
-    message: str = Field(min_length=1, max_length=1000)
-    
+    message: str = Field(min_length=1)
+
 class ChatCreate(ChatBase):
     pass
-    
-class ChatResponse(ChatBase):
-    model_config = ConfigDict(from_attributes=True) # so pydantic can read from SQLAlchemy model
-    id: UUID
-    created_at: datetime
-    updated_at: datetime
+
+class ChatResponse(BaseModel):
+    message: str
+    sources: list[str] = []
+
+class ChatHistoryResponse(BaseModel):
+    conversation_id: UUID
+    messages: list[MessageResponse] = []

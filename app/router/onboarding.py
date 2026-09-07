@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 from app.schemas.onboarding import OnboardingCreate, OnboardingResponse
 from app.schemas.workout import WorkoutResponse
@@ -23,6 +24,13 @@ router = APIRouter()
     description="Create initial onboarding workouts and exercises for the user",
 )
 async def create_onboarding_workouts(onboarding_data: OnboardingCreate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
+    # Check if user is already onboarded
+    if current_user.has_onboarded:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already onboarded"
+        )
+        
     logger.info(f"New onboarding creation started")
     new_workouts = []
     new_workout_exercises = []
@@ -45,6 +53,8 @@ async def create_onboarding_workouts(onboarding_data: OnboardingCreate, current_
             new_workout_exercises.append(new_workout_exercise)
 
     db.add_all(new_workout_exercises)
+    current_user.has_onboarded = True
+    current_user.onboarding_completed_at = datetime.now(UTC)
     await db.commit()
     logger.info(f"New onboarding completed for user: {current_user.id}")
     return new_workouts

@@ -6,13 +6,14 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from pinecone import Pinecone
 from pydantic import Field
 from typing import List
+from app.logger import logger
 
 load_dotenv()
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 PINECONE_NAMESPACE = os.getenv("PINECONE_NAMESPACE")
-TOP_K = os.getenv("TOP_K")
+TOP_K = int(os.getenv("TOP_K", "3"))
 
 class PineconeRetriever(BaseRetriever):
     index: any = Field(description="Pinecone index")
@@ -31,20 +32,38 @@ class PineconeRetriever(BaseRetriever):
             },
             fields=["content", "category"]  # fields to return
         )
-        print("results", results)
+        logger.info(f"Results: {results}")
 
-        # Convert results to LangChain Document objects
+        hits = []
+        if isinstance(results, dict):
+            hits = results.get("result", {}).get("hits", [])
+        else:
+            result = getattr(results, "result", None)
+            if result is not None:
+                hits = getattr(result, "hits", [])
+
         documents = []
-        for match in results["result"]["hits"]:
-            doc = Document(
-                page_content=match["fields"].get("content", ""),
-                metadata={
-                    "score": match["score"],
-                    "category": match["fields"].get("category", ""),
-                    "id": match["id"]
+        for match in hits:
+            if isinstance(match, dict):
+                fields = match.get("fields", {})
+                page_content = fields.get("content", "")
+                metadata = {
+                    "score": match.get("score"),
+                    "category": fields.get("category", ""),
+                    "id": match.get("id"),
                 }
+            else:
+                fields = getattr(match, "fields", {}) or {}
+                page_content = fields.get("content", "")
+                metadata = {
+                    "score": getattr(match, "score", None),
+                    "category": fields.get("category", ""),
+                    "id": getattr(match, "id", None),
+                }
+
+            documents.append(
+                Document(page_content=page_content, metadata=metadata)
             )
-            documents.append(doc)
 
         return documents
 

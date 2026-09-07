@@ -23,6 +23,7 @@ router = APIRouter()
     description="Create a new workout with the given information",
 )
 async def create_workout(workout: WorkoutCreate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
+    # TODO: Check the user has a routine for the day
     logger.info(f"New workout creation started: {workout}")
     new_workout = workout_model(
         **workout.model_dump(),

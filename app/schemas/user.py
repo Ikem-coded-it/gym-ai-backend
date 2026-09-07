@@ -30,6 +30,7 @@ class UserPublic(BaseModel):
     
 class UserPrivate(UserPublic):
     email: EmailStr = Field(unique=True, max_length=120)
+    has_onboarded: bool
     password_hash: str = Field(min_length=8, max_length=200)
     
 class Token(BaseModel):

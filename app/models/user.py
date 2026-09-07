@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UUID, Enum
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UUID, Enum, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -24,6 +24,10 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(120), unique=False, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[str] = mapped_column(Enum("user", "admin", name="user_role"), default="user", nullable=False)
+    has_onboarded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    onboarding_completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC)
