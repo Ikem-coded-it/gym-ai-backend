@@ -1,6 +1,14 @@
 from app.logger import logger
 
 
+async def stream_agent(db, user_id, user_input, history, retriever):
+    from app.services.rag.agent import stream_agent as run_agent
+
+    logger.debug(f"Streaming agent for user input: {user_input}")
+    async for token in run_agent(db, user_id, user_input, history, retriever):
+        if token:
+            yield token
+
 def query_chain(chain, user_input: str, history=None):
     try:
         logger.debug(f"Running chain for user input: {user_input}")
@@ -17,16 +25,3 @@ def query_chain(chain, user_input: str, history=None):
     except Exception as e:
         logger.exception(f"Error in query chain: {e}")
         raise
-
-
-async def stream_chain(chain, user_input: str, history=None):
-    logger.debug(f"Streaming chain for user input: {user_input}")
-    chain_input = {
-        "question": user_input,
-        "history": history or [],
-    }
-
-    async for chunk in chain.astream(chain_input):
-        text = chunk if isinstance(chunk, str) else str(chunk)
-        if text:
-            yield text

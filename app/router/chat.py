@@ -12,9 +12,8 @@ from app.logger import logger
 from app.schemas.chat import ChatCreate, ChatHistoryResponse
 from app.schemas.message import MessageResponse
 from app.services.conversation import conversation_service
-from app.services.rag.llm import get_llm_chain
 from app.services.rag.memory import load_chat_history
-from app.services.rag.query_handlers import stream_chain
+from app.services.rag.query_handlers import stream_agent
 from app.services.rag.retriever import create_retriever
 
 load_dotenv(override=True)
@@ -88,7 +87,6 @@ async def chat(
         logger.info(f"Conversation: {conversation_id}")
 
         retriever = create_retriever()
-        chain = get_llm_chain(retriever)
 
         history = await load_chat_history(db, conversation_id)
 
@@ -116,7 +114,9 @@ async def chat(
         yield _sse({"type": "start", "conversation_id": conversation_id})
 
         try:
-            async for token in stream_chain(chain, chat.message, history):
+            async for token in stream_agent(
+                db, user_id, chat.message, history, retriever
+            ):
                 response_parts.append(token)
                 yield _sse({"type": "token", "content": token})
 
