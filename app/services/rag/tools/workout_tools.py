@@ -1,22 +1,33 @@
-# app/services/rag/tools/workout_tools.py
+import json
+
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.schemas.workout_exercise import WorkoutExerciseCreate
+from app.schemas.workout_schedule import WorkoutScheduleCreate
 from app.services.workout import (
-    create_workout as create_workout_service,
+    create_workout_with_exercises as create_workout_with_exercises_service,
     get_workout_for_day as get_workout_for_day_service,
     list_workouts as list_workouts_service,
 )
-from app.schemas.workout import WorkoutCreate
-import json
-from sqlalchemy.ext.asyncio import AsyncSession
 
-class CreateWorkoutInput(BaseModel):
+
+
+class CreateWorkoutWithExercisesInput(BaseModel):
     day: str = Field(description="Lowercase weekday name, e.g. wednesday")
-    muscle_group: str = Field(description="e.g. Push, Pull, Legs")
+    muscle_group: str = Field(
+        description="Training focus for the day, e.g. push, pull, legs, upper-body"
+    )
+    exercises: list[WorkoutExerciseCreate] = Field(
+        min_length=1,
+        description="At least one exercise with sets, reps, weight, and equipment",
+    )
 
 
 class GetWorkoutsForDayInput(BaseModel):
     day: str = Field(description="Lowercase weekday name, e.g. wednesday")
+
 
 def make_workout_tools(db: AsyncSession, user_id: str):
     async def list_workouts() -> str:
@@ -36,13 +47,21 @@ def make_workout_tools(db: AsyncSession, user_id: str):
             }
         )
 
-    async def create_workout(day: str, muscle_group: str) -> str:
-        """Create a new workout day for the current user."""
-        workout = await create_workout_service(
-            db,
-            WorkoutCreate(day=day.strip().lower(), muscle_group=muscle_group),
-            user_id,
+    async def create_workout_with_exercises(
+        day: str,
+        muscle_group: str,
+        exercises: list[WorkoutExerciseCreate],
+    ) -> str:
+        """Create a workout day with exercises in one transaction."""
+        schedule = WorkoutScheduleCreate(
+            day=day.strip().lower(),
+            muscle_group=muscle_group.strip(),
+            exercises=[
+                WorkoutExerciseCreate.model_validate(exercise.model_dump())
+                for exercise in exercises
+            ],
         )
+        workout = await create_workout_with_exercises_service(db, user_id, schedule)
         return workout.model_dump_json()
 
     return [
@@ -64,9 +83,13 @@ def make_workout_tools(db: AsyncSession, user_id: str):
             ),
         ),
         StructuredTool.from_function(
-            coroutine=create_workout,
-            name="create_workout",
-            description="Create a new workout day.",
-            args_schema=CreateWorkoutInput,
+            coroutine=create_workout_with_exercises,
+            name="create_workout_with_exercises",
+            description=(
+                "Save a complete workout (day, muscle group, and exercises) after the user "
+                "has reviewed and explicitly confirmed. Requires at least one exercise. "
+                "Do not call until the user confirms the summary."
+            ),
+            args_schema=CreateWorkoutWithExercisesInput,
         ),
     ]

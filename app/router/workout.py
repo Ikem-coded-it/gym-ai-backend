@@ -1,12 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.logger import logger
 from app.schemas.workout import WorkoutCreate, WorkoutResponse, WorkoutWithExercisesResponse
-from app.services.workout import create_workout as create_workout_service, list_workouts as list_workouts_service
+from app.services.workout import (
+    create_workout as create_workout_service,
+    delete_workout as delete_workout_service,
+    list_workouts as list_workouts_service,
+)
 from auth import CurrentUser
 
 router = APIRouter()
@@ -42,3 +46,27 @@ async def get_workouts(
 ):
     logger.info(f"Getting all workouts for user: {current_user.id}")
     return await list_workouts_service(db, str(current_user.id))
+
+
+@router.delete(
+    "/{workout_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a workout",
+    description="Delete a workout owned by the current user",
+)
+async def delete_workout(
+    workout_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    logger.info(f"Deleting workout {workout_id} for user: {current_user.id}")
+    deleted = await delete_workout_service(
+        db,
+        workout_id,
+        str(current_user.id),
+    )
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workout not found",
+        )

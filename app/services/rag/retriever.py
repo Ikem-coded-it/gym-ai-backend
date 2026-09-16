@@ -32,7 +32,7 @@ class PineconeRetriever(BaseRetriever):
             },
             fields=["content", "category"]  # fields to return
         )
-        logger.info(f"Results: {results}")
+        # logger.info(f"Results: {results}")
 
         hits = []
         if isinstance(results, dict):

@@ -35,4 +35,8 @@ class Workout(Base):
         default=lambda: datetime.now(UTC)
     )
     user: Mapped["User"] = relationship(back_populates="workouts")
-    exercises: Mapped[list["WorkoutExercise"]] = relationship(back_populates="workout")
+    exercises: Mapped[list["WorkoutExercise"]] = relationship(
+        back_populates="workout",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

@@ -1,10 +1,10 @@
 from app.logger import logger
+from app.services.rag.agent import stream_agent as run_agent
 
 
 async def stream_agent(db, user_id, user_input, history, retriever):
-    from app.services.rag.agent import stream_agent as run_agent
 
-    logger.debug(f"Streaming agent for user input: {user_input}")
+    logger.debug(f"Streaming agent for user input: {user_input} by user {user_id}")
     async for token in run_agent(db, user_id, user_input, history, retriever):
         if token:
             yield token

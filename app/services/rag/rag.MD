@@ -36,7 +36,7 @@ It uses two mechanisms:
 4. Run the **agent loop**:
    - LLM decides whether to answer directly or call a tool
    - If tools are called, execute them and feed results back to the LLM
-   - Repeat until the LLM produces a final text answer (max 5 rounds)
+   - Repeat until the LLM produces a final text answer (max 8 rounds)
 5. Stream the answer to the frontend as SSE tokens
 6. Save the assistant message to the DB
 
@@ -49,9 +49,24 @@ It uses two mechanisms:
 | `get_current_date` | Returns today's date and day of week (for "today" / relative questions) |
 | `get_workouts_for_day` | Returns workouts for one weekday only (`has_workout: false` if rest day) |
 | `list_workouts` | Returns the user's full workout schedule |
-| `create_workout` | Creates a new workout day |
+| `create_workout_with_exercises` | Saves a full workout (day, muscle group, exercises) after user confirms |
 
 Set `APP_TIMEZONE` (e.g. `Asia/Manila`) so "today" resolves correctly. Defaults to `UTC`.
+
+### Scheduling flow (chat)
+
+One question per message — never ask day, muscle group, and exercises together.
+
+1. Rest day → ask if user wants to schedule
+2. User says yes → **only** ask which day
+3. User picks day → **only** ask muscle group
+4. User picks muscle group → **only** ask for exercises (or **suggest**)
+5. Review summary → user replies **confirm**
+6. Tool saves everything in one transaction
+
+#### Changes to be made:
+- Currently, we check if chat history has a pending workout review by looking for symbols in text, I have to change that to a more professional and scalable approach [agent loop helpers](../../utils/agent.py). This should be same as saving drafts. Maybe use redis
+
 
 ---
 
@@ -72,5 +87,4 @@ Requires `OPENAI_API_KEY`, `MODEL`, and Pinecone vars (`PINECONE_API_KEY`, `PINE
 ## Not yet implemented
 
 - Edit/delete workout or exercise tools
-- Tool progress events in the SSE stream
-- Persisting tool calls in chat history
+- Draft workout state persisted outside chat history
