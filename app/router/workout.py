@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -70,3 +70,4 @@ async def delete_workout(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Workout not found",
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

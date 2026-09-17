@@ -8,8 +8,8 @@ class WorkoutExerciseBase(BaseModel):
     exercise: str = Field(min_length=1, max_length=50)
     set_count: int = Field(gt=0, lt=100)
     rep_count: int = Field(gt=0, lt=100)
-    equipment_name: str = Field(min_length=1, max_length=50)
-    kg_weight: float = Field(gt=0, lt=1000)
+    equipment_name: Optional[str] = Field(min_length=1, max_length=50)
+    kg_weight: Optional[float] = Field(gt=0, lt=1000)
 
 class WorkoutExerciseCreate(WorkoutExerciseBase):
     pass

@@ -24,10 +24,10 @@ class WorkoutExercise(Base):
         index=True
     )
     exercise: Mapped[str] = mapped_column(String(120), unique=False, nullable=False)
-    set_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    rep_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    equipment_name: Mapped[str] = mapped_column(String(120), unique=False, nullable=False)
-    kg_weight: Mapped[int] = mapped_column(Integer, nullable=False)
+    set_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    rep_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    equipment_name: Mapped[str] = mapped_column(String(120), unique=False, nullable=True)
+    kg_weight: Mapped[int] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC)
