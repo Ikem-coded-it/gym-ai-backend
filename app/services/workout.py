@@ -63,6 +63,40 @@ async def delete_workout(db: AsyncSession, workout_id: str, user_id: str) -> boo
     return True
 
 
+async def delete_workout_for_day(
+    db: AsyncSession,
+    user_id: str,
+    day: str,
+) -> dict:
+    normalized_day = day.strip().lower()
+    result = await db.execute(
+        select(workout_model)
+        .where(workout_model.user_id == user_id)
+        .where(workout_model.day == normalized_day)
+        .options(selectinload(workout_model.exercises))
+    )
+    workouts = result.scalars().all()
+    if not workouts:
+        return {
+            "deleted": False,
+            "day": normalized_day,
+            "message": f"No workout scheduled for {normalized_day}.",
+        }
+
+    muscle_groups = [workout.muscle_group for workout in workouts]
+    for workout in workouts:
+        await db.delete(workout)
+    await db.commit()
+
+    return {
+        "deleted": True,
+        "day": normalized_day,
+        "count": len(workouts),
+        "muscle_groups": muscle_groups,
+        "message": f"Deleted {len(workouts)} workout(s) for {normalized_day}.",
+    }
+
+
 async def create_workout_with_exercises(
     db: AsyncSession,
     user_id: str,

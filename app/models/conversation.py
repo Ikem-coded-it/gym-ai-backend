@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import uuid
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, Enum, UUID
+from sqlalchemy import DateTime, ForeignKey, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.message import Message
+
+if TYPE_CHECKING:
+    from app.models.conversation_scheduling_state import ConversationSchedulingState
+    from app.models.message import Message
+
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -31,3 +36,8 @@ class Conversation(Base):
         default=lambda: datetime.now(UTC)
     )
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+    scheduling_state: Mapped["ConversationSchedulingState | None"] = relationship(
+        back_populates="conversation",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )

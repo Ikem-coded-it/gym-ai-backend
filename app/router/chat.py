@@ -11,10 +11,13 @@ from app.db import async_session, get_db
 from app.logger import logger
 from app.schemas.chat import ChatCreate, ChatHistoryResponse
 from app.schemas.message import MessageResponse
+from app.services.chat_scheduling import (
+    advance_after_turn,
+    resolve_active_composer,
+)
 from app.services.conversation import conversation_service
 from app.services.rag.memory import load_chat_history
 from app.services.rag.query_handlers import stream_agent
-from app.services.rag.retriever import create_retriever
 
 load_dotenv(override=True)
 router = APIRouter()
@@ -46,12 +49,29 @@ async def get_chat_history(
             db,
             user_id=str(current_user.id),
         )
+        scheduling_state = await conversation_service.get_scheduling_state(
+            db,
+            str(conversation.id),
+        )
+        last_assistant_content = next(
+            (
+                message.content
+                for message in reversed(messages)
+                if message.role == "assistant"
+            ),
+            None,
+        )
+        active_composer = resolve_active_composer(
+            scheduling_state,
+            last_assistant_content,
+        )
         return ChatHistoryResponse(
             conversation_id=conversation.id,
             messages=[
                 MessageResponse.model_validate(message)
                 for message in messages
             ],
+            active_composer=active_composer,
         )
     except HTTPException:
         raise
@@ -86,9 +106,11 @@ async def chat(
 
         logger.info(f"Conversation: {conversation_id}")
 
-        retriever = create_retriever()
-
         history = await load_chat_history(db, conversation_id)
+        scheduling_state = await conversation_service.get_scheduling_state(
+            db,
+            conversation_id,
+        )
 
         await conversation_service.save_message(
             db,
@@ -115,7 +137,7 @@ async def chat(
 
         try:
             async for token in stream_agent(
-                db, user_id, chat.message, history, retriever
+                db, user_id, chat.message, history
             ):
                 response_parts.append(token)
                 yield _sse({"type": "token", "content": token})
@@ -130,11 +152,35 @@ async def chat(
                     "assistant",
                     full_response,
                 )
+                new_state = await advance_after_turn(
+                    session,
+                    user_id,
+                    scheduling_state,
+                    chat.message,
+                    full_response,
+                    history,
+                )
+                await conversation_service.save_scheduling_state(
+                    session,
+                    conversation_id,
+                    new_state,
+                )
                 await session.commit()
+
+            composer = resolve_active_composer(new_state, full_response)
+            message_id = str(assistant_message.id)
+            if composer is not None:
+                yield _sse({
+                    "type": "composer",
+                    "message_id": message_id,
+                    "composer": composer.model_dump(mode="json"),
+                })
+            else:
+                yield _sse({"type": "composer_clear", "message_id": message_id})
 
             yield _sse({
                 "type": "done",
-                "message_id": str(assistant_message.id),
+                "message_id": message_id,
             })
             logger.info("Chat stream completed and assistant message saved")
         except Exception as e:

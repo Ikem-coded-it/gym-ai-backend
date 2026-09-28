@@ -12,6 +12,37 @@ SAVE_CONFIRMATION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+WEEKDAY_ALIASES: dict[str, str] = {
+    "monday": "monday",
+    "mon": "monday",
+    "tuesday": "tuesday",
+    "tue": "tuesday",
+    "tues": "tuesday",
+    "wednesday": "wednesday",
+    "wed": "wednesday",
+    "thursday": "thursday",
+    "thu": "thursday",
+    "thur": "thursday",
+    "thurs": "thursday",
+    "friday": "friday",
+    "fri": "friday",
+    "saturday": "saturday",
+    "sat": "saturday",
+    "sunday": "sunday",
+    "sun": "sunday",
+}
+
+SCHEDULE_DAY_PROMPT_MARKERS = (
+    "which day would you like",
+    "which day do you want",
+    "what day would you like",
+    "what day do you want",
+    "schedule this for",
+    "like to schedule",
+    "choose the weekday",
+    "pick a day",
+)
+
 
 def message_text(message) -> str:
     content = getattr(message, "content", "")
@@ -55,6 +86,41 @@ def awaiting_workout_save(question: str, history: list | None) -> bool:
     return is_explicit_save_confirmation(question) and history_has_pending_workout_review(
         history
     )
+
+
+def parse_weekday_from_message(text: str) -> str | None:
+    normalized = text.strip().lower().rstrip(".")
+    if not normalized:
+        return None
+
+    if normalized in WEEKDAY_ALIASES:
+        return WEEKDAY_ALIASES[normalized]
+
+    for token in re.findall(r"[a-z]+", normalized):
+        if token in WEEKDAY_ALIASES:
+            return WEEKDAY_ALIASES[token]
+
+    return None
+
+
+def history_awaiting_schedule_day_choice(history: list | None) -> bool:
+    if not history:
+        return False
+
+    for message in reversed(history):
+        if not isinstance(message, AIMessage):
+            continue
+        text = message_text(message).lower()
+        if any(marker in text for marker in SCHEDULE_DAY_PROMPT_MARKERS):
+            return True
+        return False
+    return False
+
+
+def scheduling_day_reply(question: str, history: list | None) -> str | None:
+    if not history_awaiting_schedule_day_choice(history):
+        return None
+    return parse_weekday_from_message(question)
 
 
 def get_llm(*, streaming: bool) -> ChatOpenAI:

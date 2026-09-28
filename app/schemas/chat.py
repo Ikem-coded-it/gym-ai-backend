@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field
 from uuid import UUID
 
+from app.schemas.chat_composer import ChatComposer
 from app.schemas.message import MessageResponse
 
 
@@ -18,3 +19,4 @@ class ChatResponse(BaseModel):
 class ChatHistoryResponse(BaseModel):
     conversation_id: UUID
     messages: list[MessageResponse] = []
+    active_composer: ChatComposer | None = None

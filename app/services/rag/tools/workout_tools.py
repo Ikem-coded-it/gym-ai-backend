@@ -8,6 +8,7 @@ from app.schemas.workout_exercise import WorkoutExerciseCreate
 from app.schemas.workout_schedule import WorkoutScheduleCreate
 from app.services.workout import (
     create_workout_with_exercises as create_workout_with_exercises_service,
+    delete_workout_for_day as delete_workout_for_day_service,
     get_workout_for_day as get_workout_for_day_service,
     list_workouts as list_workouts_service,
 )
@@ -27,6 +28,12 @@ class CreateWorkoutWithExercisesInput(BaseModel):
 
 class GetWorkoutsForDayInput(BaseModel):
     day: str = Field(description="Lowercase weekday name, e.g. wednesday")
+
+
+class DeleteWorkoutForDayInput(BaseModel):
+    day: str = Field(
+        description="Lowercase weekday name of the workout to delete, e.g. monday"
+    )
 
 
 def make_workout_tools(db: AsyncSession, user_id: str):
@@ -64,13 +71,24 @@ def make_workout_tools(db: AsyncSession, user_id: str):
         workout = await create_workout_with_exercises_service(db, user_id, schedule)
         return workout.model_dump_json()
 
+    async def delete_workout_for_day(day: str) -> str:
+        """Delete the user's scheduled workout for a specific weekday."""
+        result = await delete_workout_for_day_service(
+            db,
+            user_id,
+            day.strip().lower(),
+        )
+        return json.dumps(result)
+
     return [
         StructuredTool.from_function(
             coroutine=get_workouts_for_day,
             name="get_workouts_for_day",
             description=(
                 "Get workouts scheduled for one specific weekday only. "
-                "Use after get_current_date when the user asks about today or a particular day."
+                "REQUIRED after the user picks a day during workout scheduling (Step 1b) "
+                "before asking for muscle group. "
+                "Also use when the user asks about today or a particular day."
             ),
             args_schema=GetWorkoutsForDayInput,
         ),
@@ -91,5 +109,16 @@ def make_workout_tools(db: AsyncSession, user_id: str):
                 "Do not call until the user confirms the summary."
             ),
             args_schema=CreateWorkoutWithExercisesInput,
+        ),
+        StructuredTool.from_function(
+            coroutine=delete_workout_for_day,
+            name="delete_workout_for_day",
+            description=(
+                "Delete the user's scheduled workout for one weekday (and its exercises). "
+                "Use when the user asks to remove, cancel, or delete a day's workout "
+                "(e.g. 'delete Monday's workout'). Pass the weekday as lowercase "
+                "(monday, tuesday, etc.). Do not use for editing — delete then schedule anew."
+            ),
+            args_schema=DeleteWorkoutForDayInput,
         ),
     ]

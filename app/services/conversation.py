@@ -1,9 +1,15 @@
 from app.logger import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.models.conversation_scheduling_state import ConversationSchedulingState
 from app.models.message import Message
 from app.models.conversation import Conversation
 from app.schemas.conversation import ConversationResponse
+from app.schemas.scheduling_state import SchedulingState
+from app.services.chat_scheduling import (
+    apply_scheduling_state,
+    scheduling_state_from_row,
+)
 import uuid
 
 
@@ -81,6 +87,37 @@ class ConversationService:
         await db.commit()
         await db.refresh(conversation)
         return ConversationResponse.model_validate(conversation)
+
+    @staticmethod
+    async def get_scheduling_state(
+        db: AsyncSession,
+        conversation_id: str,
+    ) -> SchedulingState:
+        result = await db.execute(
+            select(ConversationSchedulingState).where(
+                ConversationSchedulingState.conversation_id == conversation_id
+            )
+        )
+        row = result.scalar_one_or_none()
+        return scheduling_state_from_row(row)
+
+    @staticmethod
+    async def save_scheduling_state(
+        db: AsyncSession,
+        conversation_id: str,
+        state: SchedulingState,
+    ) -> None:
+        result = await db.execute(
+            select(ConversationSchedulingState).where(
+                ConversationSchedulingState.conversation_id == conversation_id
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            row = ConversationSchedulingState(conversation_id=conversation_id)
+            db.add(row)
+        apply_scheduling_state(row, state)
+        await db.flush()
 
 
 conversation_service = ConversationService()

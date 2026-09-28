@@ -25,6 +25,7 @@ It uses two mechanisms:
 | `app/services/workout.py` | Workout DB logic (shared by API and tools) |
 | `app/services/rag/retriever.py` | Pinecone search |
 | `app/services/rag/memory.py` | Loads chat history |
+| `app/services/chat_scheduling.py` | Scheduling step state + composer payloads |
 
 ---
 
@@ -39,6 +40,7 @@ It uses two mechanisms:
    - Repeat until the LLM produces a final text answer (max 8 rounds)
 5. Stream the answer to the frontend as SSE tokens
 6. Save the assistant message to the DB
+7. Advance `conversation_scheduling_states`, emit SSE `composer` (or `composer_clear`)
 
 ---
 
@@ -72,7 +74,9 @@ One question per message — never ask day, muscle group, and exercises together
 
 ## Streaming
 
-The backend sends Server-Sent Events: `start` → `token` (text chunks) → `done` (or `error`).
+The backend sends Server-Sent Events: `start` → `token` (text chunks) → `composer` or `composer_clear` → `done` (or `error`).
+
+`composer` carries UI shortcuts for the active scheduling step (weekday select, muscle chips, confirm). `GET /chat/history` also returns `active_composer` when state is restored from the DB.
 
 Tool execution happens silently on the server — the frontend only sees the final streamed reply.
 
@@ -87,4 +91,4 @@ Requires `OPENAI_API_KEY`, `MODEL`, and Pinecone vars (`PINECONE_API_KEY`, `PINE
 ## Not yet implemented
 
 - Edit/delete workout or exercise tools
-- Draft workout state persisted outside chat history
+- Edit/delete workout or exercise tools (scheduling draft is persisted on `conversation_scheduling_states`)
