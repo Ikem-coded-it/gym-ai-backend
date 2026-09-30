@@ -15,28 +15,29 @@ from app.utils.agent import (
     message_text,
     parse_weekday_from_message,
 )
+from app.utils.schedule_intent_classifier import classify_user_intent, classify_assistant_message
 
-SCHEDULE_OFFER_MARKERS = (
-    "would you like to schedule a workout",
-    "schedule a workout",
-)
+# SCHEDULE_OFFER_MARKERS = (
+#     "would you like to schedule a workout",
+#     "schedule a workout",
+# )
 
-SCHEDULE_YES_PATTERN = re.compile(
-    r"^\s*(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|let'?s do it)\s*\.?\s*$",
-    re.IGNORECASE,
-)
+# SCHEDULE_YES_PATTERN = re.compile(
+#     r"^\s*(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|let'?s do it)\s*\.?\s*$",
+#     re.IGNORECASE,
+# )
 
-SCHEDULE_INTENT_PATTERN = re.compile(
-    r"\b(schedule|book|plan|add|create)\b.*\b(workout|training|session)\b"
-    r"|\b(wanna|want to)\s+schedule\b",
-    re.IGNORECASE,
-)
+# SCHEDULE_INTENT_PATTERN = re.compile(
+#     r"\b(schedule|book|plan|add|create)\b.*\b(workout|training|session)\b"
+#     r"|\b(wanna|want to)\s+schedule\b",
+#     re.IGNORECASE,
+# )
 
-MUSCLE_GROUP_PROMPT_MARKERS = (
-    "muscle group",
-    "what are you training",
-    "what are you training that day",
-)
+# MUSCLE_GROUP_PROMPT_MARKERS = (
+#     "muscle group",
+#     "what are you training",
+#     "what are you training that day",
+# )
 
 SUGGEST_PATTERN = re.compile(r"^\s*suggest\s*\.?\s*$", re.IGNORECASE)
 
@@ -148,7 +149,7 @@ def composer_for_state(state: SchedulingState) -> ChatComposer | None:
     return None
 
 
-def resolve_active_composer(
+async def resolve_active_composer(
     state: SchedulingState,
     last_assistant_message: str | None = None,
 ) -> ChatComposer | None:
@@ -158,56 +159,59 @@ def resolve_active_composer(
         return composer
     if not last_assistant_message:
         return None
+    
+    assistant_intent = await classify_assistant_message(last_assistant_message)
+    logger.info(f"Assistant intent: {assistant_intent.intent} (confidence: {assistant_intent.confidence})")
 
-    if _assistant_asks_for_schedule_day(last_assistant_message):
+    if assistant_intent.intent == "ask_day":
         return composer_for_state(
             SchedulingState(flow="schedule_workout", step="pick_day")
         )
-    if _assistant_asks_for_muscle_group(last_assistant_message):
+    if assistant_intent.intent == "ask_muscle_group":
         return composer_for_state(
             SchedulingState(flow="schedule_workout", step="pick_muscle_group")
         )
-    if _assistant_has_review(last_assistant_message):
+    if assistant_intent.intent == "ask_review":
         return composer_for_state(
             SchedulingState(flow="schedule_workout", step="review")
         )
     return None
 
 
-def _history_offered_schedule(history: list | None) -> bool:
-    if not history:
-        return False
-    for message in reversed(history):
-        if not isinstance(message, AIMessage):
-            continue
-        text = message_text(message).lower()
-        return any(marker in text for marker in SCHEDULE_OFFER_MARKERS)
-    return False
+# def _history_offered_schedule(history: list | None) -> bool:
+#     if not history:
+#         return False
+#     for message in reversed(history):
+#         if not isinstance(message, AIMessage):
+#             continue
+#         text = message_text(message).lower()
+#         return any(marker in text for marker in SCHEDULE_OFFER_MARKERS)
+#     return False
 
 
-def _assistant_has_review(assistant_message: str) -> bool:
-    fake = AIMessage(content=assistant_message)
-    return history_has_pending_workout_review([fake])
+# def _assistant_has_review(assistant_message: str) -> bool:
+#     fake = AIMessage(content=assistant_message)
+#     return history_has_pending_workout_review([fake])
 
 
-def _assistant_asks_for_schedule_day(assistant_message: str) -> bool:
-    lower = assistant_message.lower()
-    return any(marker in lower for marker in SCHEDULE_DAY_PROMPT_MARKERS)
+# def _assistant_asks_for_schedule_day(assistant_message: str) -> bool:
+#     lower = assistant_message.lower()
+#     return any(marker in lower for marker in SCHEDULE_DAY_PROMPT_MARKERS)
 
 
-def _assistant_asks_for_muscle_group(assistant_message: str) -> bool:
-    lower = assistant_message.lower()
-    return any(marker in lower for marker in MUSCLE_GROUP_PROMPT_MARKERS)
+# def _assistant_asks_for_muscle_group(assistant_message: str) -> bool:
+#     lower = assistant_message.lower()
+#     return any(marker in lower for marker in MUSCLE_GROUP_PROMPT_MARKERS)
 
 
-def _user_expressed_schedule_intent(user_message: str) -> bool:
-    return bool(SCHEDULE_INTENT_PATTERN.search(user_message.strip()))
+# def _user_expressed_schedule_intent(user_message: str) -> bool:
+#     return bool(SCHEDULE_INTENT_PATTERN.search(user_message.strip()))
 
 
-def _user_wants_to_schedule(user_message: str, history: list | None) -> bool:
-    if not SCHEDULE_YES_PATTERN.match(user_message.strip()):
-        return False
-    return _history_offered_schedule(history)
+# def _user_wants_to_schedule(user_message: str, history: list | None) -> bool:
+#     if not SCHEDULE_YES_PATTERN.match(user_message.strip()):
+#         return False
+#     return _history_offered_schedule(history)
 
 
 def _normalize_muscle_group(text: str) -> str | None:
@@ -266,27 +270,32 @@ async def advance_after_turn(
 ) -> SchedulingState:
     """Update scheduling state after one chat turn (user message + assistant reply)."""
     state = state.model_copy(deep=True)
+    user_intent = await classify_user_intent(user_message)
+    assistant_intent = await classify_assistant_message(assistant_message)
+    logger.info(f"Intent classified: {user_intent.intent} (confidence: {user_intent.confidence}), {assistant_intent.intent} (confidence: {assistant_intent.confidence})")
 
     if state.flow == "idle" and state.step == "idle":
-        if _user_wants_to_schedule(user_message, history):
+        # if _user_wants_to_schedule(user_message, history):
+        if user_intent.intent == "confirm_yes":
             state.flow = "schedule_workout"
             state.step = "pick_day"
             state.draft = state.draft.model_copy(
                 update={"day": None, "muscle_group": None}
             )
             logger.info("Scheduling flow started (yes); step=pick_day")
-        elif _user_expressed_schedule_intent(user_message):
+        # elif _user_expressed_schedule_intent(user_message):
+        elif user_intent.intent == "schedule_workout":
             state.flow = "schedule_workout"
             state.step = "pick_day"
             state.draft = state.draft.model_copy(
                 update={"day": None, "muscle_group": None}
             )
             logger.info("Scheduling flow started (intent); step=pick_day")
-        elif _assistant_asks_for_schedule_day(assistant_message):
+        elif assistant_intent.intent == "ask_day":
             state.flow = "schedule_workout"
             state.step = "pick_day"
             logger.info("Assistant asked for schedule day; step=pick_day")
-        elif _assistant_asks_for_muscle_group(assistant_message):
+        elif assistant_intent.intent == "ask_muscle_group":
             state.flow = "schedule_workout"
             state.step = "pick_muscle_group"
             day = parse_weekday_from_message(user_message)
@@ -317,7 +326,7 @@ async def advance_after_turn(
             logger.info("Muscle group set; step=pick_exercises")
 
     elif state.step == "pick_exercises":
-        if _assistant_has_review(assistant_message):
+        if assistant_intent.intent == "ask_review":
             state.step = "review"
             logger.info("Review summary detected; step=review")
 
@@ -328,13 +337,13 @@ async def advance_after_turn(
             state.draft = state.draft.model_copy(update={"day": None, "muscle_group": None})
             logger.info("Save confirmed; scheduling flow cleared")
 
-    if state.step == "pick_exercises" and _assistant_has_review(assistant_message):
+    if state.step == "pick_exercises" and assistant_intent.intent == "ask_review":
         state.step = "review"
 
     if (
         state.step == "pick_day"
         and state.draft.day
-        and _assistant_asks_for_muscle_group(assistant_message)
+        and assistant_intent.intent == "ask_muscle_group"
     ):
         state.step = "pick_muscle_group"
         logger.info("Assistant asked for muscle group; step=pick_muscle_group")

@@ -61,7 +61,7 @@ async def get_chat_history(
             ),
             None,
         )
-        active_composer = resolve_active_composer(
+        active_composer = await resolve_active_composer(
             scheduling_state,
             last_assistant_content,
         )
@@ -167,7 +167,7 @@ async def chat(
                 )
                 await session.commit()
 
-            composer = resolve_active_composer(new_state, full_response)
+            composer = await resolve_active_composer(new_state, full_response)
             message_id = str(assistant_message.id)
             if composer is not None:
                 yield _sse({
