@@ -11,8 +11,9 @@ class AssistantIntentResult(BaseModel):
     intent: Literal[
         "ask_day",
         "ask_muscle_group",
-        "ask_confirmation",
+        "ask_review",
         "ask_exercises",
+        "confirm_save",
         "other"
     ]
     confidence: float  # 0.0 to 1.0
@@ -42,7 +43,7 @@ USER_INTENT_PROMPT = ChatPromptTemplate.from_messages([
     - confirm_no: user is declining, cancelling, or saying no  
     - provide_day: user is providing or mentioning a day of the week
     - provide_muscle_group: user is mentioning a muscle group or body part
-    - provide_exercise: user is mentioning an exercise
+    - provide_exercise: user is listing one or more exercises (including multi-line workout details)
     - other: none of the above
 
     Return JSON only. No explanation.
@@ -58,9 +59,14 @@ ASSISTANT_INTENT_PROMPT = ChatPromptTemplate.from_messages([
     Intents:
     - ask_day: asking for a day of the week
     - ask_muscle_group: asking for a muscle group  
-    - ask_confirmation: asking for confirmation/review
+    - ask_review: asking for review/confirmation
     - ask_exercises: asking about exercises
+    - confirm_save: confirming the workout has been saved successfully
     - other: none of the above
+    
+    special case:
+    - if the assistant is asking for review/confirmation, and the user has not explicitly confirmed the save, then the intent is "ask_review"
+    - if the assistant is confirming the save, then the intent is "confirm_save"
     
     Return JSON only. No explanation.
     Example: {{"intent": "ask_day", "confidence": 0.95}}

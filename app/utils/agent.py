@@ -6,11 +6,8 @@ from langchain_openai import ChatOpenAI
 
 from app.logger import logger
 from app.services.rag.llm import MODEL, OPENAI_API_KEY
+from app.utils.schedule_intent_classifier import classify_user_intent, classify_assistant_message
 
-SAVE_CONFIRMATION_PATTERN = re.compile(
-    r"^\s*(confirm(?:ed)?|yes(?:\s+save)?|save(?:\s+it)?|looks good|go ahead|do it)\s*\.?\s*$",
-    re.IGNORECASE,
-)
 
 WEEKDAY_ALIASES: dict[str, str] = {
     "monday": "monday",
@@ -32,18 +29,6 @@ WEEKDAY_ALIASES: dict[str, str] = {
     "sun": "sunday",
 }
 
-SCHEDULE_DAY_PROMPT_MARKERS = (
-    "which day would you like",
-    "which day do you want",
-    "what day would you like",
-    "what day do you want",
-    "schedule this for",
-    "like to schedule",
-    "choose the weekday",
-    "pick a day",
-)
-
-
 def message_text(message) -> str:
     content = getattr(message, "content", "")
     if isinstance(content, str):
@@ -59,33 +44,23 @@ def message_text(message) -> str:
     return str(content or "")
 
 
-def is_explicit_save_confirmation(question: str) -> bool:
-    return bool(SAVE_CONFIRMATION_PATTERN.match(question.strip()))
-
-def history_has_pending_workout_review(history: list | None) -> bool:
-    # TODO: This is a temporary solution to check if the chat history has a pending workout review
-    # We should use a more professional and scalable approach to check if the chat history has a pending workout review
-    # Maybe use redis to store the pending workout review and check if it exists
+def get_last_assistant_message(history: list | None) -> str | None:
     if not history:
-        return False
-
+        return None
     for message in reversed(history):
         if not isinstance(message, AIMessage):
             continue
-        text = message_text(message).lower()
-        if "confirm" not in text:
-            continue
-        if "•" in text or "×" in text or " x " in text or "@" in text:
-            return True
-    return False
+        else:
+            return message_text(message)
+    return None
 
 
 # This function is used to check if the user has a pending workout review
 #  by checking if the user has explicitly confirmed the save and if the chat history has a pending workout review
-def awaiting_workout_save(question: str, history: list | None) -> bool:
-    return is_explicit_save_confirmation(question) and history_has_pending_workout_review(
-        history
-    )
+async def awaiting_workout_save(question: str, history: list | None) -> bool:
+    user_intent = await classify_user_intent(question)
+    assistant_intent = await classify_assistant_message(get_last_assistant_message(history))
+    return user_intent.intent == "confirm_yes" and float(user_intent.confidence) > 0.8 and assistant_intent.intent == "ask_review" and float(assistant_intent.confidence) > 0.8
 
 
 def parse_weekday_from_message(text: str) -> str | None:
@@ -103,22 +78,9 @@ def parse_weekday_from_message(text: str) -> str | None:
     return None
 
 
-def history_awaiting_schedule_day_choice(history: list | None) -> bool:
-    if not history:
-        return False
-
-    for message in reversed(history):
-        if not isinstance(message, AIMessage):
-            continue
-        text = message_text(message).lower()
-        if any(marker in text for marker in SCHEDULE_DAY_PROMPT_MARKERS):
-            return True
-        return False
-    return False
-
-
-def scheduling_day_reply(question: str, history: list | None) -> str | None:
-    if not history_awaiting_schedule_day_choice(history):
+async def scheduling_day_reply(question: str, history: list | None) -> str | None:
+    assistant_intent = await classify_assistant_message(get_last_assistant_message(history))
+    if assistant_intent.intent != "ask_day":
         return None
     return parse_weekday_from_message(question)
 

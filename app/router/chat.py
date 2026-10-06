@@ -53,6 +53,7 @@ async def get_chat_history(
             db,
             str(conversation.id),
         )
+        logger.info(f"Scheduling state: {scheduling_state}")
         last_assistant_content = next(
             (
                 message.content
@@ -65,6 +66,7 @@ async def get_chat_history(
             scheduling_state,
             last_assistant_content,
         )
+        logger.info(f"Active composer: {active_composer}")
         return ChatHistoryResponse(
             conversation_id=conversation.id,
             messages=[

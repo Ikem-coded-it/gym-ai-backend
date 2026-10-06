@@ -124,7 +124,7 @@ async def stream_agent(
     ]
     tool_map = {tool.name: tool for tool in tools}
 
-    schedule_day = scheduling_day_reply(question, history)
+    schedule_day = await scheduling_day_reply(question, history)
     if schedule_day:
         logger.info("User picked schedule day %s; checking availability", schedule_day)
         availability = await execute_tool_call(
@@ -147,7 +147,7 @@ async def stream_agent(
             )
         )
 
-    awaiting_save = awaiting_workout_save(question, history)
+    awaiting_save = await awaiting_workout_save(question, history)
     if awaiting_save:
         logger.info("User confirmed workout save; requiring tool calls")
 
