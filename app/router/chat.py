@@ -13,6 +13,7 @@ from app.schemas.chat import ChatCreate, ChatHistoryResponse
 from app.schemas.message import MessageResponse
 from app.services.chat_scheduling import (
     advance_after_turn,
+    prepare_scheduling_turn,
     resolve_active_composer,
 )
 from app.services.conversation import conversation_service
@@ -138,8 +139,20 @@ async def chat(
         yield _sse({"type": "start", "conversation_id": conversation_id})
 
         try:
+            plan = await prepare_scheduling_turn(
+                db,
+                user_id,
+                scheduling_state,
+                chat.message,
+                history,
+            )
             async for token in stream_agent(
-                db, user_id, chat.message, history
+                db,
+                user_id,
+                chat.message,
+                history,
+                scheduling_directive=plan.directive,
+                user_intent=plan.user_intent,
             ):
                 response_parts.append(token)
                 yield _sse({"type": "token", "content": token})
@@ -157,10 +170,11 @@ async def chat(
                 new_state = await advance_after_turn(
                     session,
                     user_id,
-                    scheduling_state,
+                    plan.state,
                     chat.message,
                     full_response,
                     history,
+                    user_intent=plan.user_intent,
                 )
                 await conversation_service.save_scheduling_state(
                     session,

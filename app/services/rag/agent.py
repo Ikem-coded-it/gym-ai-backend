@@ -10,7 +10,7 @@ from app.utils.agent import (
     awaiting_workout_save,
     execute_tool_call,
     get_llm,
-    scheduling_day_reply,
+    schedule_day_for_availability_check,
 )
 
 MAX_AGENT_ITERATIONS = 8
@@ -47,6 +47,11 @@ You are knowledgeable about gym equipment, exercises, workout programs, and trai
 **Scheduling a workout (when user wants to add one):**
 Guide the user **one step at a time**. Each reply must contain **only the current step's question** — never combine steps in one message.
 
+**Day availability (mandatory):**
+- NEVER ask for muscle group or exercises until the target day's availability is known (`has_workout: false` from `get_workouts_for_day` or from the system availability check).
+- If the user names a weekday while scheduling (even in the same message as muscle group), treat day availability first.
+- If `has_workout` is true, that day is blocked — ask for a different weekday only. Do NOT ask muscle group.
+
 Determine the current step from the conversation history:
 
 **Step 1 — Day** (first reply after user says yes to scheduling)
@@ -54,10 +59,11 @@ Determine the current step from the conversation history:
 - Example: "Which day would you like to schedule this for? (We were just discussing Wednesday — is that the one?)"
 - Do NOT ask about muscle group or exercises yet.
 
-**Step 1b — Day availability** (immediately after the user names a weekday)
-- The system runs `get_workouts_for_day` for that day before you continue.
+**Step 1b — Day availability** (whenever a weekday is chosen or named for a new workout)
+- The system runs `get_workouts_for_day` for that day before you continue (or you MUST call it yourself if missing).
+- If a later system message begins with "Authoritative scheduling decision", follow it exactly. It already lists filled slots and the only question to ask. Do not re-ask for a filled slot.
 - If `has_workout` is true: tell the user that day already has a workout (mention muscle group if returned) and ask them to pick a **different** weekday. Do NOT ask for muscle group.
-- If `has_workout` is false: proceed to Step 2 only.
+- If `has_workout` is false, ask only for the next empty slot named in the scheduling decision. If there is no scheduling decision and the user already stated muscle group(s), ask for exercises (Step 3). Otherwise ask ONLY for muscle group (Step 2).
 
 **Step 2 — Muscle group** (after user confirms a **free** day)
 - Ask ONLY what muscle group(s) they are training. The user may pick more than one.
@@ -66,9 +72,9 @@ Determine the current step from the conversation history:
 - Do NOT ask about exercises yet.
 
 **Step 3 — Exercises** (after user gives muscle group)
-- Ask ONLY how they want to add exercises.
-- Example: "Send your exercises one per line like: Bench Press — 3 sets × 10 reps @ 60kg, barbell — or reply **suggest** and I'll propose a plan."
-- If they reply **suggest**, call `search_fitness_knowledge` with their muscle group or goal, then propose 3–5 exercises from those results, then go to Step 4.
+- The app renders an exercise form under your message (sets/reps/weight + "Suggest a plan"). When a scheduling decision puts you on this step, do NOT ask how to add exercises or give text-entry examples; point them to the form below in one or two short sentences.
+- If the user sends **suggest** from the form or chat, call `search_fitness_knowledge` with their muscle group or goal, then propose 3–5 exercises from those results, then go to Step 4.
+- If they submit exercises via the form (structured lines in chat), go to Step 4 when you have enough detail.
 
 **Step 4 — Review** (after exercises are provided or suggested)
 - Show ONLY the summary and ask for confirmation.
@@ -94,6 +100,7 @@ Determine the current step from the conversation history:
 - Do NOT list steps 1, 2, and 3 together.
 - Do NOT save partial or draft workouts.
 - NEVER claim a workout was saved unless `create_workout_with_exercises` returned success in this turn.
+- If the user cancels or changes their mind mid-scheduling (e.g. "never mind", "I don't want to schedule anymore"), acknowledge briefly and stop the scheduling flow. Do NOT ask for muscle group, exercises, or confirmation.
 
 **Guidelines:**
 - Respond in a calm, factual and motivational tone
@@ -112,6 +119,8 @@ async def stream_agent(
     user_id: str,
     question: str,
     history: list | None,
+    scheduling_directive: str | None = None,
+    user_intent=None,
 ):
     retriever = create_retriever()
     system_message = SystemMessage(content=SYSTEM_PROMPT)
@@ -124,30 +133,41 @@ async def stream_agent(
     ]
     tool_map = {tool.name: tool for tool in tools}
 
-    schedule_day = await scheduling_day_reply(question, history)
-    if schedule_day:
-        logger.info("User picked schedule day %s; checking availability", schedule_day)
-        availability = await execute_tool_call(
-            tool_map,
-            {
-                "name": "get_workouts_for_day",
-                "args": {"day": schedule_day},
-                "id": "schedule-day-availability-check",
-            },
-        )
-        messages.append(
-            SystemMessage(
-                content=(
-                    f"The user chose `{schedule_day}` while scheduling a new workout.\n"
-                    f"Result from get_workouts_for_day:\n{availability}\n"
-                    "If has_workout is true, that day is not available — tell the user and "
-                    "ask for another weekday only. "
-                    "If has_workout is false, ask ONLY for muscle group (Step 2)."
+    if scheduling_directive:
+        logger.info("Applying scheduling directive")
+        messages.append(SystemMessage(content=scheduling_directive))
+    else:
+        schedule_day = await schedule_day_for_availability_check(question, history)
+        if schedule_day:
+            logger.info("Checking schedule availability for day %s", schedule_day)
+            availability = await execute_tool_call(
+                tool_map,
+                {
+                    "name": "get_workouts_for_day",
+                    "args": {"day": schedule_day},
+                    "id": "schedule-day-availability-check",
+                },
+            )
+            messages.append(
+                SystemMessage(
+                    content=(
+                        f"The user is scheduling a workout and named `{schedule_day}`.\n"
+                        f"Result from get_workouts_for_day (authoritative):\n{availability}\n"
+                        "You MUST follow this before any other scheduling step.\n"
+                        "- If has_workout is true: tell the user that day is taken (include existing "
+                        "muscle group if present) and ask for a different weekday only. "
+                        "Do NOT ask for muscle group or exercises.\n"
+                        "- If has_workout is false and they already stated muscle group(s), "
+                        "go to Step 3 (how to add exercises). Otherwise ask ONLY for muscle group (Step 2)."
+                    )
                 )
             )
-        )
 
-    awaiting_save = await awaiting_workout_save(question, history)
+    awaiting_save = await awaiting_workout_save(
+        question,
+        history,
+        user_intent=user_intent,
+    )
     if awaiting_save:
         logger.info("User confirmed workout save; requiring tool calls")
 

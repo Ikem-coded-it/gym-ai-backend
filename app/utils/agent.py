@@ -57,8 +57,13 @@ def get_last_assistant_message(history: list | None) -> str | None:
 
 # This function is used to check if the user has a pending workout review
 #  by checking if the user has explicitly confirmed the save and if the chat history has a pending workout review
-async def awaiting_workout_save(question: str, history: list | None) -> bool:
-    user_intent = await classify_user_intent(question)
+async def awaiting_workout_save(
+    question: str,
+    history: list | None,
+    user_intent=None,
+) -> bool:
+    if user_intent is None:
+        user_intent = await classify_user_intent(question)
     assistant_intent = await classify_assistant_message(get_last_assistant_message(history))
     return user_intent.intent == "confirm_yes" and float(user_intent.confidence) > 0.8 and assistant_intent.intent == "ask_review" and float(assistant_intent.confidence) > 0.8
 
@@ -78,11 +83,74 @@ def parse_weekday_from_message(text: str) -> str | None:
     return None
 
 
-async def scheduling_day_reply(question: str, history: list | None) -> str | None:
-    assistant_intent = await classify_assistant_message(get_last_assistant_message(history))
-    if assistant_intent.intent != "ask_day":
-        return None
+SCHEDULE_KEYWORDS_PATTERN = re.compile(
+    r"\b(schedule|scheduled|plan|add|book|set up|create|want to|workout for|training on)\b",
+    re.IGNORECASE,
+)
+
+
+def message_suggests_scheduling(text: str) -> bool:
+    return bool(SCHEDULE_KEYWORDS_PATTERN.search(text))
+
+
+def _resolve_day_from_question(question: str, day_slot: str | None) -> str | None:
+    if day_slot:
+        parsed = parse_weekday_from_message(day_slot)
+        if parsed:
+            return parsed
     return parse_weekday_from_message(question)
+
+
+async def schedule_day_for_availability_check(
+    question: str,
+    history: list | None,
+    user_intent=None,
+) -> str | None:
+    """
+    Return a weekday when the user is picking or naming a day for a new workout
+    and we must verify the day is free before muscle group / exercises.
+    """
+    if user_intent is None:
+        user_intent = await classify_user_intent(question)
+    day = _resolve_day_from_question(question, user_intent.day)
+    if not day:
+        return None
+
+    user_confident = float(user_intent.confidence) >= 0.6
+    last_assistant = get_last_assistant_message(history)
+    assistant_intent = await classify_assistant_message(last_assistant or "")
+
+    if user_intent.intent in (
+        "confirm_yes",
+        "confirm_no",
+        "cancel_schedule",
+        "provide_exercise",
+    ):
+        return None
+
+    if assistant_intent.intent == "ask_day" and user_intent.intent in (
+        "provide_day",
+        "schedule_workout",
+        "confirm_yes",
+    ):
+        return day
+
+    if user_intent.intent == "schedule_workout" and user_confident:
+        return day
+
+    if user_intent.intent == "provide_day" and user_confident:
+        if assistant_intent.intent in ("ask_day", "other") or not history:
+            return day
+
+    if message_suggests_scheduling(question):
+        return day
+
+    return None
+
+
+async def scheduling_day_reply(question: str, history: list | None) -> str | None:
+    """Backward-compatible alias for schedule day availability pre-check."""
+    return await schedule_day_for_availability_check(question, history)
 
 
 def get_llm(*, streaming: bool) -> ChatOpenAI:

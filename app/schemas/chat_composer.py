@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.scheduling_state import ExerciseDraft
+
 
 class ComposerOption(BaseModel):
     label: str
@@ -23,3 +25,4 @@ class ChatComposer(BaseModel):
     kind: ComposerKind
     options: list[ComposerOption] = Field(default_factory=list)
     suggested_value: str | None = None
+    exercises: list[ExerciseDraft] | None = None

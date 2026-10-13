@@ -8,15 +8,27 @@ ScheduleStep = Literal[
     "pick_day",
     "pick_muscle_group",
     "pick_exercises",
+    "edit_exercises",
     "review",
 ]
 
 ScheduleFlow = Literal["idle", "schedule_workout"]
 
 
+class ExerciseDraft(BaseModel):
+    """Lenient exercise row kept on the scheduling draft (pre-fills the exercise form on edit)."""
+
+    exercise: str
+    set_count: int = 0
+    rep_count: int = 0
+    kg_weight: float | None = None
+    equipment_name: str | None = None
+
+
 class SchedulingDraft(BaseModel):
     day: str | None = None
     muscle_group: str | None = None
+    exercises: list[ExerciseDraft] = Field(default_factory=list)
 
 
 class SchedulingState(BaseModel):
