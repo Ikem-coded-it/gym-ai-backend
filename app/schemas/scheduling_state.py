@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.exercise_edit import PendingExerciseEdit
+
 
 ScheduleStep = Literal[
     "idle",
@@ -35,6 +37,7 @@ class SchedulingState(BaseModel):
     flow: ScheduleFlow = "idle"
     step: ScheduleStep = "idle"
     draft: SchedulingDraft = Field(default_factory=SchedulingDraft)
+    pending_exercise_edit: PendingExerciseEdit | None = None
 
     @classmethod
     def idle(cls) -> "SchedulingState":

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.logger import logger
 from app.schemas.chat_composer import ChatComposer, ComposerOption
 from app.models.conversation_scheduling_state import ConversationSchedulingState
+from app.schemas.exercise_edit import PendingExerciseEdit
 from app.schemas.scheduling_state import (
     ExerciseDraft,
     ScheduleStep,
@@ -85,6 +86,16 @@ CONFIRM_OPTIONS: list[ComposerOption] = [
 ]
 
 
+def _pending_from_row(raw: dict | None) -> PendingExerciseEdit | None:
+    if not raw:
+        return None
+    try:
+        return PendingExerciseEdit.model_validate(raw)
+    except Exception:
+        logger.warning("Skipping malformed pending exercise edit: %s", raw)
+        return None
+
+
 def _exercises_from_row(raw: list | None) -> list[ExerciseDraft]:
     if not raw:
         return []
@@ -110,6 +121,7 @@ def scheduling_state_from_row(
             muscle_group=row.draft_muscle_group,
             exercises=_exercises_from_row(row.draft_exercises),
         ),
+        pending_exercise_edit=_pending_from_row(row.pending_exercise_edit),
     )
 
 
@@ -126,10 +138,35 @@ def apply_scheduling_state(
         if state.draft.exercises
         else None
     )
+    row.pending_exercise_edit = (
+        state.pending_exercise_edit.model_dump(mode="json")
+        if state.pending_exercise_edit
+        else None
+    )
 
 # This sets and returns the chat composer for the current scheduling state.
 # The chat composer is used to tell the UI what type of input to show the user.
+def composer_for_pending_edit(state: SchedulingState) -> ChatComposer | None:
+    pending = state.pending_exercise_edit
+    if pending is None:
+        return None
+    if pending.day is None:
+        return ChatComposer(kind="day_select", options=WEEKDAY_OPTIONS)
+    if len(pending.candidates) < 2:
+        return None
+    return ChatComposer(
+        kind="chips",
+        options=[
+            ComposerOption(label=candidate.name, value=candidate.name)
+            for candidate in pending.candidates
+        ],
+    )
+
+
 def composer_for_state(state: SchedulingState) -> ChatComposer | None:
+    pending_composer = composer_for_pending_edit(state)
+    if pending_composer is not None:
+        return pending_composer
     if not state.is_scheduling():
         return None
 
@@ -174,7 +211,7 @@ async def resolve_active_composer(
         return None
 
     # Do not infer scheduling composers when flow is idle (e.g. user cancelled).
-    if not state.is_scheduling():
+    if not state.is_scheduling() or state.pending_exercise_edit is not None:
         return None
     
     assistant_intent = await classify_assistant_message(last_assistant_message)
@@ -382,6 +419,8 @@ def _should_enter_scheduling(
 ) -> bool:
     if state.flow == "schedule_workout" and state.step != "idle":
         return True
+    if user_intent.intent == "update_saved_exercise":
+        return False
     confident = float(user_intent.confidence) > SLOT_CONFIDENCE_THRESHOLD
     if user_intent.intent == "confirm_yes" and confident:
         return True
@@ -493,16 +532,22 @@ async def _apply_user_slots(
     return blocked_day, existing_muscle_group
 
 
+# Classifies user intent (schedule_intent_classifier — e.g. provide_day, confirm_yes, edit_workout).
+# Updates draft (day/muscle) when the user supplies slots; checks if the day is already taken.
+# Sets directive: extra system messages like “ask ONLY for weekday” or “user submitted exercises — show review”.
+# Returns SchedulingTurnPlan: { state, directive, user_intent }.
 async def prepare_scheduling_turn(
     db: AsyncSession,
     user_id: str,
     state: SchedulingState,
     user_message: str,
     history: list | None,
+    user_intent: UserIntentResult | None = None,
 ) -> SchedulingTurnPlan:
     """Fill slots from the user message and choose the next step before the coach replies."""
     state = state.model_copy(deep=True)
-    user_intent = await classify_user_intent(user_message)
+    if user_intent is None:
+        user_intent = await classify_user_intent(user_message)
     logger.info(
         "Scheduling slots: intent=%s confidence=%s day=%s muscle_groups=%s",
         user_intent.intent,
@@ -580,6 +625,7 @@ async def prepare_scheduling_turn(
 
     if not state.is_scheduling():
         state.draft = SchedulingDraft()
+        state.pending_exercise_edit = None
     state.flow = "schedule_workout"
 
     blocked_day, existing_muscle_group = await _apply_user_slots(
@@ -657,6 +703,10 @@ def _skip_filled_slots(state: SchedulingState) -> None:
         state.step = target
 
 
+# Classifies user + assistant intents again.
+# Moves step forward (e.g. exercises submitted → review, confirm → idle after save intent).
+# Extracts exercises from review text into draft.exercises when entering review.
+# Does not replace the agent saving workouts — it mainly drives UI step and draft data.
 async def advance_after_turn(
     db: AsyncSession,
     user_id: str,
@@ -682,6 +732,12 @@ async def advance_after_turn(
     if is_cancel_schedule_intent(user_intent):
         logger.info("User cancelled scheduling; resetting flow to idle")
         return SchedulingState.idle()
+
+    if state.pending_exercise_edit is not None:
+        return state
+
+    if user_intent.intent == "update_saved_exercise":
+        return state
 
     assistant_confident = float(assistant_intent.confidence) > SLOT_CONFIDENCE_THRESHOLD
     if state.flow == "idle" and state.step == "idle":

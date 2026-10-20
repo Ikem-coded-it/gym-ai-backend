@@ -1,9 +1,14 @@
+from datetime import UTC, datetime
+from uuid import UUID
+
 from app.models.workout import Workout as workout_model
 from app.models.workout_exercise import WorkoutExercise as workout_exercise_model
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from app.schemas.exercise_edit import DayExerciseRow
 from app.schemas.workout import WorkoutCreate, WorkoutResponse, WorkoutWithExercisesResponse
+from app.schemas.workout_exercise import WorkoutExerciseResponse, WorkoutExerciseUpdate
 from app.schemas.workout_schedule import WorkoutScheduleCreate
 
 async def list_workouts(db: AsyncSession, user_id: str):
@@ -135,3 +140,101 @@ async def create_workout_with_exercises(
     )
     workout = result.scalar_one()
     return WorkoutWithExercisesResponse.model_validate(workout)
+
+
+def _compact_exercise(exercise, workout_id: str) -> DayExerciseRow:
+    return DayExerciseRow(
+        id=str(exercise.id),
+        workout_id=str(workout_id),
+        exercise=exercise.exercise,
+        set_count=exercise.set_count,
+        rep_count=exercise.rep_count,
+        kg_weight=exercise.kg_weight,
+        equipment_name=exercise.equipment_name,
+    )
+
+
+async def list_exercises_for_day(
+    db: AsyncSession,
+    user_id: str,
+    day: str,
+) -> list[DayExerciseRow]:
+    workouts = await get_workout_for_day(db, user_id, day)
+    rows: list[DayExerciseRow] = []
+    for workout in workouts:
+        for exercise in workout.exercises:
+            rows.append(_compact_exercise(exercise, str(workout.id)))
+    return rows
+
+
+async def update_exercise_for_day(
+    db: AsyncSession,
+    user_id: str,
+    exercise_id: str,
+    patch: WorkoutExerciseUpdate,
+    day: str | None = None,
+) -> dict:
+    """Patch one owned exercise. Optionally require it to belong to `day`."""
+    normalized_day = day.strip().lower() if day else None
+    try:
+        exercise_uuid = str(UUID(str(exercise_id)))
+    except (TypeError, ValueError):
+        exercise_uuid = str(exercise_id)
+    result = await db.execute(
+        select(workout_exercise_model)
+        .join(workout_model)
+        .where(workout_exercise_model.id == exercise_uuid)
+        .where(workout_model.user_id == user_id)
+        .options(selectinload(workout_exercise_model.workout))
+    )
+    exercise = result.scalar_one_or_none()
+    if exercise is None:
+        day_exercises = (
+            await list_exercises_for_day(db, user_id, normalized_day)
+            if normalized_day
+            else []
+        )
+        return {
+            "updated": False,
+            "reason": "not_found",
+            "day": normalized_day,
+            "exercises": [row.model_dump(mode="json") for row in day_exercises],
+            "message": "No matching exercise found for this user.",
+        }
+
+    workout_day = str(exercise.workout.day).strip().lower()
+    if normalized_day and workout_day != normalized_day:
+        day_exercises = await list_exercises_for_day(db, user_id, normalized_day)
+        return {
+            "updated": False,
+            "reason": "not_found",
+            "day": normalized_day,
+            "exercises": [row.model_dump(mode="json") for row in day_exercises],
+            "message": f"That exercise is not on {normalized_day}.",
+        }
+
+    changed_fields: list[str] = []
+    updates = patch.model_dump(exclude_unset=True)
+    if "kg_weight" in updates and updates["kg_weight"] is not None:
+        updates["kg_weight"] = int(round(float(updates["kg_weight"])))
+
+    for field, value in updates.items():
+        if value is None:
+            continue
+        setattr(exercise, field, value)
+        changed_fields.append(field)
+
+    exercise.updated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(exercise)
+
+    return {
+        "updated": True,
+        "day": workout_day,
+        "workout_id": str(exercise.workout_id),
+        "exercise": WorkoutExerciseResponse.model_validate(exercise).model_dump(
+            mode="json"
+        ),
+        "changed_fields": changed_fields,
+        "message": f"Updated {exercise.exercise} for {workout_day}.",
+    }

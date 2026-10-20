@@ -16,6 +16,7 @@ from app.services.chat_scheduling import (
     prepare_scheduling_turn,
     resolve_active_composer,
 )
+from app.services.exercise_edit import prepare_exercise_edit_turn
 from app.services.conversation import conversation_service
 from app.services.rag.memory import load_chat_history
 from app.services.rag.query_handlers import stream_agent
@@ -139,13 +140,23 @@ async def chat(
         yield _sse({"type": "start", "conversation_id": conversation_id})
 
         try:
-            plan = await prepare_scheduling_turn(
+            edit_plan = await prepare_exercise_edit_turn(
                 db,
                 user_id,
                 scheduling_state,
                 chat.message,
-                history,
             )
+            if edit_plan.handled:
+                plan = edit_plan
+            else:
+                plan = await prepare_scheduling_turn(
+                    db,
+                    user_id,
+                    edit_plan.state,
+                    chat.message,
+                    history,
+                    user_intent=edit_plan.user_intent,
+                )
             async for token in stream_agent(
                 db,
                 user_id,

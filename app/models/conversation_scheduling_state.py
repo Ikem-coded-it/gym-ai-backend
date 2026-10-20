@@ -45,6 +45,7 @@ class ConversationSchedulingState(Base):
     draft_day: Mapped[str | None] = mapped_column(String(50), nullable=True)
     draft_muscle_group: Mapped[str | None] = mapped_column(String(120), nullable=True)
     draft_exercises: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    pending_exercise_edit: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

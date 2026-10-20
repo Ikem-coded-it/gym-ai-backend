@@ -28,6 +28,7 @@ class UserIntentResult(BaseModel):
         "provide_muscle_group", # user is providing a muscle group
         "provide_exercise",    # user is providing an exercise
         "edit_workout",        # user wants to change the proposed workout before saving
+        "update_saved_exercise",  # user logged or changed a saved day's exercise
         "other"                # none of the above
     ]
     day: str | None = None  # lowercase weekday when the message names one
@@ -72,9 +73,14 @@ USER_INTENT_PROMPT = ChatPromptTemplate.from_messages([
     - provide_day: user is providing or mentioning a day of the week
     - provide_muscle_group: user is mentioning a muscle group or body part
     - provide_exercise: user is listing one or more exercises (including multi-line workout details)
-    - edit_workout: user wants to edit/change the proposed workout before saving
-      (e.g. "edit", "let me change something", "I want to tweak the exercises")
-      Do NOT use this when they describe a specific inline change like "make squats 4 sets"
+    - edit_workout: ONLY the chip/reply "edit" or a vague request to change a proposed
+      (not yet saved) plan, e.g. "let me change something", "I want to tweak the exercises".
+      Do NOT use this when they name an exercise and a field (sets/reps/weight) or a weekday.
+    - update_saved_exercise: user logged performance or wants to change an already saved
+      exercise. Use this for messages like:
+      "Just hit 11 reps on my press", "I hit 12 on squats",
+      "change bench on tuesday to 2 sets", "change Thursday bench to 80kg".
+      Not for scheduling a new workout.
     - other: none of the above
 
     Use cancel_schedule (not confirm_no) when the user stops scheduling mid-flow, e.g.:
@@ -87,6 +93,9 @@ USER_INTENT_PROMPT = ChatPromptTemplate.from_messages([
     Example: {{"intent": "cancel_schedule", "day": null, "muscle_groups": [], "confidence": 0.95}}
     Example: {{"intent": "provide_day", "day": "monday", "muscle_groups": [], "confidence": 0.95}}
     Example: {{"intent": "edit_workout", "day": null, "muscle_groups": [], "confidence": 0.95}}
+    Example: {{"intent": "update_saved_exercise", "day": null, "muscle_groups": [], "confidence": 0.95}}
+    Example: {{"intent": "update_saved_exercise", "day": "thursday", "muscle_groups": [], "confidence": 0.9}}
+    Example: {{"intent": "update_saved_exercise", "day": "tuesday", "muscle_groups": [], "confidence": 0.95}}
     """),
     ("human", "User message: {message}")
 ])
