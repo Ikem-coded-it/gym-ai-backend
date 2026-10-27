@@ -339,6 +339,9 @@ async def prepare_exercise_edit_turn(
         )
 
     pending = state.pending_exercise_edit
+    if pending is not None and pending.mode == "add":
+        # An add-exercise flow owns this pending record (see exercise_add.py).
+        return not_handled()
     if pending is not None:
         if is_cancel_schedule_intent(user_intent):
             logger.info("Clearing pending exercise edit after cancel")

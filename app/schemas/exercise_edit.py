@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas.workout_exercise import WorkoutExerciseUpdate
@@ -8,9 +10,24 @@ class ExerciseEditCandidate(BaseModel):
     name: str
 
 
-class PendingExerciseEdit(BaseModel):
-    """Slot-filling record for a saved-exercise edit: day, exercise, and patch."""
+class NewExerciseSlots(BaseModel):
+    """Slots collected for adding a new exercise to a saved workout."""
 
+    exercise: str | None = None
+    set_count: int | None = None
+    rep_count: int | None = None
+    kg_weight: float | None = None
+    equipment_name: str | None = None
+
+
+class PendingExerciseEdit(BaseModel):
+    """Slot-filling record for a saved-workout change.
+
+    mode "update": day, exercise, and patch. mode "add": day and new_exercise.
+    """
+
+    mode: Literal["update", "add"] = "update"
+    new_exercise: NewExerciseSlots = Field(default_factory=NewExerciseSlots)
     day: str | None = None
     patch: WorkoutExerciseUpdate | None = None
     # Set once the exercise slot is filled (single match or chip pick).

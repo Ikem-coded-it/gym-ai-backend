@@ -29,7 +29,8 @@ class UserIntentResult(BaseModel):
         "provide_exercise",    # user is providing an exercise
         "edit_workout",        # user wants to change the proposed workout before saving
         "update_saved_exercise",  # user logged or changed a saved day's exercise
-        "other"                # none of the above
+        "add_saved_exercise",  # user adds an exercise to an already scheduled workout
+        "other"               # none of the above
     ]
     day: str | None = None  # lowercase weekday when the message names one
     muscle_groups: list[str] = Field(default_factory=list)
@@ -81,6 +82,11 @@ USER_INTENT_PROMPT = ChatPromptTemplate.from_messages([
       "Just hit 11 reps on my press", "I hit 12 on squats",
       "change bench on tuesday to 2 sets", "change Thursday bench to 80kg".
       Not for scheduling a new workout.
+    - add_saved_exercise: user wants to add a NEW exercise to a workout that is already
+      scheduled/saved, e.g. "add lateral raises to my thursday workout",
+      "put 3 sets of dips on monday", "add squats to today's workout".
+      Not for creating a whole new workout day (that is schedule_workout) and not for
+      changing sets/reps of an existing exercise (that is update_saved_exercise).
     - other: none of the above
 
     Use cancel_schedule (not confirm_no) when the user stops scheduling mid-flow, e.g.:
@@ -96,6 +102,8 @@ USER_INTENT_PROMPT = ChatPromptTemplate.from_messages([
     Example: {{"intent": "update_saved_exercise", "day": null, "muscle_groups": [], "confidence": 0.95}}
     Example: {{"intent": "update_saved_exercise", "day": "thursday", "muscle_groups": [], "confidence": 0.9}}
     Example: {{"intent": "update_saved_exercise", "day": "tuesday", "muscle_groups": [], "confidence": 0.95}}
+    Example: {{"intent": "add_saved_exercise", "day": "thursday", "muscle_groups": [], "confidence": 0.95}}
+    Example: {{"intent": "add_saved_exercise", "day": null, "muscle_groups": [], "confidence": 0.9}}
     """),
     ("human", "User message: {message}")
 ])

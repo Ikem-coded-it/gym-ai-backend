@@ -152,6 +152,22 @@ def composer_for_pending_edit(state: SchedulingState) -> ChatComposer | None:
         return None
     if pending.day is None:
         return ChatComposer(kind="day_select", options=WEEKDAY_OPTIONS)
+    if pending.mode == "add":
+        # Form pre-filled with whatever the user already gave; no "Suggest" option here.
+        slots = pending.new_exercise
+        return ChatComposer(
+            kind="exercise_form",
+            options=[],
+            exercises=[
+                ExerciseDraft(
+                    exercise=slots.exercise or "",
+                    set_count=slots.set_count or 0,
+                    rep_count=slots.rep_count or 0,
+                    kg_weight=slots.kg_weight,
+                    equipment_name=slots.equipment_name,
+                )
+            ],
+        )
     if len(pending.candidates) < 2:
         return None
     return ChatComposer(
@@ -419,7 +435,7 @@ def _should_enter_scheduling(
 ) -> bool:
     if state.flow == "schedule_workout" and state.step != "idle":
         return True
-    if user_intent.intent == "update_saved_exercise":
+    if user_intent.intent in ("update_saved_exercise", "add_saved_exercise"):
         return False
     confident = float(user_intent.confidence) > SLOT_CONFIDENCE_THRESHOLD
     if user_intent.intent == "confirm_yes" and confident:
@@ -736,7 +752,12 @@ async def advance_after_turn(
     if state.pending_exercise_edit is not None:
         return state
 
-    if user_intent.intent == "update_saved_exercise":
+    # Mid-wizard, an exercise form submit can be labeled as a saved-exercise change;
+    # it still has to advance the wizard.
+    if not state.is_scheduling() and user_intent.intent in (
+        "update_saved_exercise",
+        "add_saved_exercise",
+    ):
         return state
 
     assistant_confident = float(assistant_intent.confidence) > SLOT_CONFIDENCE_THRESHOLD

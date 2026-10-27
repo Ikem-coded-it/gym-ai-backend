@@ -1,0 +1,25 @@
+Test Questions
+
+- Question: What do I have today?
+- Answer: Here’s your workout scheduled for today, Friday, focusing on shoulders and arms:
+
+``
+Friday — Shoulders, Arms
+• Overhead Press: 2×12 @ 50kg (Barbell)
+• Reverse Fly: 3×10 @ 15kg (Dumbbell)
+• Hammer Curl: 3×13 @ 13kg (Dumbbells)
+• Barbell Curl: 4×12 @ 40kg (Barbell)
+• Lateral Raises: 3×10 @ 13kg (Dumbbells)
+• Wrist Curls: 2×20 @ 12kg (Dumbbells)
+``
+
+If you need to make any changes or have questions, just let me know!
+
+- Question: I want to schedule a workout
+- Answer: Which day would you like to schedule this workout for? (shows day selector)
+
+- Question: I want to schedule a workout for saturday
+- Answer: What are you training on Saturday? (e.g. push, pull, legs — you can choose several) (shows muscle group selector)
+
+- Question: I want to add goblet squats to monday
+- Answer: Please fill in the remaining fields in the form below for the Goblet Squats, including the number of sets and reps. Let me know if you need any assistance!

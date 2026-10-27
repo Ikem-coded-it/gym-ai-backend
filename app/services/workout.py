@@ -8,7 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.schemas.exercise_edit import DayExerciseRow
 from app.schemas.workout import WorkoutCreate, WorkoutResponse, WorkoutWithExercisesResponse
-from app.schemas.workout_exercise import WorkoutExerciseResponse, WorkoutExerciseUpdate
+from app.schemas.workout_exercise import (
+    WorkoutExerciseCreate,
+    WorkoutExerciseResponse,
+    WorkoutExerciseUpdate,
+)
 from app.schemas.workout_schedule import WorkoutScheduleCreate
 
 async def list_workouts(db: AsyncSession, user_id: str):
@@ -165,6 +169,48 @@ async def list_exercises_for_day(
         for exercise in workout.exercises:
             rows.append(_compact_exercise(exercise, str(workout.id)))
     return rows
+
+
+async def add_exercise_to_day(
+    db: AsyncSession,
+    user_id: str,
+    day: str,
+    exercise: WorkoutExerciseCreate,
+) -> dict:
+    """Append one exercise to the user's existing workout for `day`."""
+    normalized_day = day.strip().lower()
+    result = await db.execute(
+        select(workout_model)
+        .where(workout_model.user_id == user_id)
+        .where(workout_model.day == normalized_day)
+    )
+    workout = result.scalars().first()
+    if workout is None:
+        return {
+            "added": False,
+            "reason": "no_workout",
+            "day": normalized_day,
+            "message": f"No workout scheduled for {normalized_day}.",
+        }
+
+    values = exercise.model_dump()
+    if values.get("kg_weight") is not None:
+        values["kg_weight"] = int(round(float(values["kg_weight"])))
+    new_exercise = workout_exercise_model(**values, workout_id=workout.id)
+    db.add(new_exercise)
+    await db.commit()
+    await db.refresh(new_exercise)
+
+    return {
+        "added": True,
+        "day": normalized_day,
+        "workout_id": str(workout.id),
+        "muscle_group": workout.muscle_group,
+        "exercise": WorkoutExerciseResponse.model_validate(new_exercise).model_dump(
+            mode="json"
+        ),
+        "message": f"Added {new_exercise.exercise} to {normalized_day}.",
+    }
 
 
 async def update_exercise_for_day(

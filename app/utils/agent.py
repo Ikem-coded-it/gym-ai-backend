@@ -126,6 +126,7 @@ async def schedule_day_for_availability_check(
         "cancel_schedule",
         "provide_exercise",
         "update_saved_exercise",
+        "add_saved_exercise",
         "edit_workout",
     ):
         return None
