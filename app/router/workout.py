@@ -10,6 +10,7 @@ from app.schemas.workout_exercise import WorkoutExerciseCreate, WorkoutExerciseR
 from app.services.workout import (
     add_exercise_to_workout,
     create_workout as create_workout_service,
+    delete_exercise_from_workout,
     delete_workout as delete_workout_service,
     list_workouts as list_workouts_service,
 )
@@ -76,6 +77,35 @@ async def add_workout_exercise(
             detail="Workout not found",
         )
     return created
+
+
+@router.delete(
+    "/{workout_id}/exercises/{exercise_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an exercise from a workout",
+    description="Delete one exercise from a workout owned by the current user",
+)
+async def delete_workout_exercise(
+    workout_id: str,
+    exercise_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    logger.info(
+        f"Deleting exercise {exercise_id} from workout {workout_id} for user: {current_user.id}"
+    )
+    deleted = await delete_exercise_from_workout(
+        db,
+        str(current_user.id),
+        workout_id,
+        exercise_id,
+    )
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exercise not found",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete(

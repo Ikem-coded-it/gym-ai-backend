@@ -205,6 +205,28 @@ async def add_exercise_to_workout(
     return WorkoutExerciseResponse.model_validate(new_exercise)
 
 
+async def delete_exercise_from_workout(
+    db: AsyncSession,
+    user_id: str,
+    workout_id: str,
+    exercise_id: str,
+) -> bool:
+    """Delete one exercise from an owned workout. False when it isn't found."""
+    result = await db.execute(
+        select(workout_exercise_model)
+        .join(workout_model)
+        .where(workout_exercise_model.id == exercise_id)
+        .where(workout_exercise_model.workout_id == workout_id)
+        .where(workout_model.user_id == user_id)
+    )
+    exercise = result.scalar_one_or_none()
+    if exercise is None:
+        return False
+    await db.delete(exercise)
+    await db.commit()
+    return True
+
+
 async def add_exercise_to_day(
     db: AsyncSession,
     user_id: str,
