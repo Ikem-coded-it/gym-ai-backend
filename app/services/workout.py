@@ -171,6 +171,40 @@ async def list_exercises_for_day(
     return rows
 
 
+async def _insert_exercise(
+    db: AsyncSession,
+    workout: workout_model,
+    exercise: WorkoutExerciseCreate,
+) -> workout_exercise_model:
+    values = exercise.model_dump()
+    if values.get("kg_weight") is not None:
+        values["kg_weight"] = int(round(float(values["kg_weight"])))
+    new_exercise = workout_exercise_model(**values, workout_id=workout.id)
+    db.add(new_exercise)
+    await db.commit()
+    await db.refresh(new_exercise)
+    return new_exercise
+
+
+async def add_exercise_to_workout(
+    db: AsyncSession,
+    user_id: str,
+    workout_id: str,
+    exercise: WorkoutExerciseCreate,
+) -> WorkoutExerciseResponse | None:
+    """Append one exercise to an owned workout. None when the workout isn't the user's."""
+    result = await db.execute(
+        select(workout_model)
+        .where(workout_model.id == workout_id)
+        .where(workout_model.user_id == user_id)
+    )
+    workout = result.scalar_one_or_none()
+    if workout is None:
+        return None
+    new_exercise = await _insert_exercise(db, workout, exercise)
+    return WorkoutExerciseResponse.model_validate(new_exercise)
+
+
 async def add_exercise_to_day(
     db: AsyncSession,
     user_id: str,
@@ -193,13 +227,7 @@ async def add_exercise_to_day(
             "message": f"No workout scheduled for {normalized_day}.",
         }
 
-    values = exercise.model_dump()
-    if values.get("kg_weight") is not None:
-        values["kg_weight"] = int(round(float(values["kg_weight"])))
-    new_exercise = workout_exercise_model(**values, workout_id=workout.id)
-    db.add(new_exercise)
-    await db.commit()
-    await db.refresh(new_exercise)
+    new_exercise = await _insert_exercise(db, workout, exercise)
 
     return {
         "added": True,
