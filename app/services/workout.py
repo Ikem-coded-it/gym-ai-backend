@@ -78,12 +78,31 @@ async def get_workout_for_day(db: AsyncSession, user_id: str, day: str):
     ]
 
 
+WEEKDAYS = frozenset(
+    {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+)
+
+
 async def create_workout(db: AsyncSession, workout: WorkoutCreate, user_id: str):
+    """Create a workout for a free weekday. Raises ValueError for a bad or taken day."""
+    normalized_day = workout.day.strip().lower()
+    if normalized_day not in WEEKDAYS:
+        raise ValueError(f"'{workout.day}' is not a weekday.")
+    if await get_workout_for_day(db, user_id, normalized_day):
+        raise ValueError(f"A workout is already scheduled for {normalized_day}.")
+
     new_workout = workout_model(
-        **workout.model_dump(),
+        day=normalized_day,
+        muscle_group=workout.muscle_group.strip(),
         user_id=user_id,
     )
     db.add(new_workout)
+    await db.flush()
+    if workout.exercises:
+        db.add_all(
+            build_workout_exercise(new_workout.id, exercise)
+            for exercise in workout.exercises
+        )
     await db.commit()
     await db.refresh(new_workout)
     return WorkoutResponse.model_validate(new_workout)

@@ -39,9 +39,14 @@ async def create_workout(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    # TODO: Check the user has a routine for the day
     logger.info(f"New workout creation started: {workout}")
-    return await create_workout_service(db, workout, str(current_user.id))
+    try:
+        return await create_workout_service(db, workout, str(current_user.id))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(

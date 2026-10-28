@@ -8,7 +8,7 @@ from app.schemas.workout_exercise import WorkoutExerciseCreate, WorkoutExerciseR
 
 # Base — shared fields used by other schemas
 class WorkoutBase(BaseModel):
-    muscle_group: str = Field(min_length=1, max_length=50)
+    muscle_group: str = Field(min_length=1, max_length=120)
     day: str = Field(min_length=1, max_length=9)
 
 # Create — fields needed when creating a new workout
