@@ -24,13 +24,18 @@ Return every exercise that is clearly listed. Ignore prose that is not an exerci
 
 For each exercise:
 - exercise: the movement name
-- set_count: integer number of sets (0 if missing)
-- rep_count: integer number of reps (0 if missing)
-- kg_weight: kilograms as a number. Use 0 or null for bodyweight / no added load.
 - equipment_name: equipment if mentioned, otherwise null
+- sets: one entry per set, in order. Each set has:
+  - rep_count: integer reps (0 if missing)
+  - kg_weight: kilograms as a number. Use 0 or null for bodyweight / no added load.
+  - notes: a short note for that set if given, otherwise null
+- When the text gives one plan for all sets, such as "3 sets x 10 reps @ 60kg" or "3x10", expand it
+  into that many identical set entries.
+- When sets differ ("Set 1: 10 reps @ 60kg, Set 2: 8 reps @ 70kg"), keep each set separate.
+- When only the exercise name is given with no set details, return an empty sets list.
 
 Return JSON only. No explanation.
-Example: {{"exercises": [{{"exercise": "Squats", "set_count": 3, "rep_count": 10, "kg_weight": 100, "equipment_name": "barbell"}}]}}
+Example: {{"exercises": [{{"exercise": "Squats", "equipment_name": "barbell", "sets": [{{"rep_count": 10, "kg_weight": 100, "notes": null}}, {{"rep_count": 8, "kg_weight": 110, "notes": null}}]}}]}}
 """,
     ),
     ("human", "Text:\n{message}"),

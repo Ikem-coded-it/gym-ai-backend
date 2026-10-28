@@ -9,6 +9,7 @@ from app.models.conversation_scheduling_state import ConversationSchedulingState
 from app.schemas.exercise_edit import PendingExerciseEdit
 from app.schemas.scheduling_state import (
     ExerciseDraft,
+    ExerciseSetDraft,
     ScheduleStep,
     SchedulingDraft,
     SchedulingState,
@@ -161,10 +162,15 @@ def composer_for_pending_edit(state: SchedulingState) -> ChatComposer | None:
             exercises=[
                 ExerciseDraft(
                     exercise=slots.exercise or "",
-                    set_count=slots.set_count or 0,
-                    rep_count=slots.rep_count or 0,
-                    kg_weight=slots.kg_weight,
                     equipment_name=slots.equipment_name,
+                    sets=[
+                        ExerciseSetDraft(
+                            rep_count=new_set.rep_count,
+                            kg_weight=new_set.kg_weight,
+                            notes=new_set.notes,
+                        )
+                        for new_set in slots.sets
+                    ],
                 )
             ],
         )
@@ -280,8 +286,8 @@ EDIT_EXERCISES_DIRECTIVE = (
 EXERCISES_SUBMITTED_DIRECTIVE = (
     f"{DIRECTIVE_HEADER}\n"
     "The user submitted exercises in this message (exercise form or typed lines).\n"
-    "Show Step 4 review ONLY: a clear summary listing every exercise with sets, reps, "
-    "weight, and equipment from their message.\n"
+    "Show Step 4 review ONLY: a clear summary listing every exercise with each set's "
+    "reps and weight (e.g. Set 1: 10 reps @ 60kg) and the equipment, from their message.\n"
     "End with: Reply **confirm** to save, or tell me what to change.\n"
     "Do NOT ask them to use the exercise form again or add exercises again."
 )

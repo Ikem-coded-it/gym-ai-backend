@@ -17,14 +17,20 @@ ScheduleStep = Literal[
 ScheduleFlow = Literal["idle", "schedule_workout"]
 
 
+class ExerciseSetDraft(BaseModel):
+    """One set on a draft exercise. rep_count 0 means not filled in yet."""
+
+    rep_count: int = 0
+    kg_weight: float | None = None
+    notes: str | None = None
+
+
 class ExerciseDraft(BaseModel):
     """Lenient exercise row kept on the scheduling draft (pre-fills the exercise form on edit)."""
 
     exercise: str
-    set_count: int = 0
-    rep_count: int = 0
-    kg_weight: float | None = None
     equipment_name: str | None = None
+    sets: list[ExerciseSetDraft] = Field(default_factory=list)
 
 
 class SchedulingDraft(BaseModel):

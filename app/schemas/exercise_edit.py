@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.exercise_set import ExerciseSetCreate
 from app.schemas.workout_exercise import WorkoutExerciseUpdate
 
 
@@ -14,10 +15,8 @@ class NewExerciseSlots(BaseModel):
     """Slots collected for adding a new exercise to a saved workout."""
 
     exercise: str | None = None
-    set_count: int | None = None
-    rep_count: int | None = None
-    kg_weight: float | None = None
     equipment_name: str | None = None
+    sets: list[ExerciseSetCreate] = Field(default_factory=list)
 
 
 class PendingExerciseEdit(BaseModel):

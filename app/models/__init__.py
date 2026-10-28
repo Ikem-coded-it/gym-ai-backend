@@ -5,6 +5,7 @@ from app.models.workout_exercise import WorkoutExercise
 from app.models.conversation import Conversation
 from app.models.conversation_scheduling_state import ConversationSchedulingState
 from app.models.message import Message
+from app.models.exercise_set import ExerciseSet
 
 __all__ = [
     "User",
@@ -13,4 +14,5 @@ __all__ = [
     "Conversation",
     "ConversationSchedulingState",
     "Message",
+    "ExerciseSet",
 ]

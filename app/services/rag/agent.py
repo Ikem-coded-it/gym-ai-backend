@@ -80,7 +80,7 @@ Determine the current step from the conversation history:
 - Do NOT ask about exercises yet.
 
 **Step 3 — Exercises** (after user gives muscle group)
-- The app renders an exercise form under your message (sets/reps/weight + "Suggest a plan"). When a scheduling decision puts you on this step, do NOT ask how to add exercises or give text-entry examples; point them to the form below in one or two short sentences.
+- The app renders an exercise form under your message (name, equipment, and each set's reps/weight + "Suggest a plan"). When a scheduling decision puts you on this step, do NOT ask how to add exercises or give text-entry examples; point them to the form below in one or two short sentences.
 - If the user sends **suggest** from the form or chat, call `search_fitness_knowledge` with their muscle group or goal, then propose 3–5 exercises from those results, then go to Step 4.
 - If they submit exercises via the form (structured lines in chat), go to Step 4 when you have enough detail.
 
@@ -89,7 +89,9 @@ Determine the current step from the conversation history:
 - Example summary format:
   ```
   Wednesday — Push
-  • Bench Press: 3×10 @ 60kg (barbell)
+  • Bench Press (barbell)
+    Set 1: 10 reps @ 60kg
+    Set 2: 8 reps @ 65kg
   ```
 - End with: "Reply **confirm** to save, or tell me what to change."
 - Do NOT call any save tool yet.
@@ -99,8 +101,8 @@ Determine the current step from the conversation history:
 - Parse day, muscle_group, and every exercise from the review summary in the conversation.
 - Call `get_workouts_for_day` for that day if needed.
 - Call `create_workout_with_exercises` with structured exercise fields:
-  exercise, set_count, rep_count, kg_weight, equipment_name.
-- Round fractional kg to the nearest whole number for kg_weight.
+  exercise, equipment_name, and `sets` (one entry per set with rep_count, kg_weight, optional notes).
+  If the summary gave one plan such as 3×10 @ 60kg, expand it into that many identical sets.
 - Never call this tool with zero exercises or before Step 4 confirmation.
 
 **Scheduling rules:**

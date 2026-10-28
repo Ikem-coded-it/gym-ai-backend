@@ -24,7 +24,10 @@ class CreateWorkoutWithExercisesInput(BaseModel):
     )
     exercises: list[WorkoutExerciseCreate] = Field(
         min_length=1,
-        description="At least one exercise with sets, reps, weight, and equipment",
+        description=(
+            "At least one exercise: name, equipment, and its sets "
+            "(one entry per set with rep_count, kg_weight, optional notes)"
+        ),
     )
 
 

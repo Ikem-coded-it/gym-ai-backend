@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logger import logger
 from app.schemas.exercise_edit import NewExerciseSlots, PendingExerciseEdit
+from app.schemas.exercise_set import ExerciseSetCreate
 from app.schemas.scheduling_state import SchedulingState
 from app.schemas.workout_exercise import WorkoutExerciseCreate
 from app.services.exercise_edit import (
@@ -41,40 +42,54 @@ def _is_bare_day_reply(message: str) -> bool:
     return parse_weekday_from_message(message) is not None and len(message.split()) <= 3
 
 
+def _uniform_sets(message: str) -> list[ExerciseSetCreate]:
+    """Sets from a one-line plan like "3x10", or "3 sets of 10 reps @ 40kg"."""
+    grid = SETS_X_REPS_PATTERN.search(message)
+    patch = fallback_patch_from_message(message)
+    if grid:
+        count, reps = int(grid.group(1)), int(grid.group(2))
+    elif patch is not None and patch.rep_count:
+        count, reps = patch.set_count or 1, patch.rep_count
+    else:
+        return []
+    kg = patch.kg_weight if patch is not None else None
+    return [
+        ExerciseSetCreate(rep_count=reps, kg_weight=kg) for _ in range(min(count, 50))
+    ]
+
+
 async def _extract_slots(message: str) -> NewExerciseSlots:
-    """Exercise name and numbers this single message provides."""
+    """Exercise name, equipment and sets this single message provides."""
     slots = NewExerciseSlots()
     if not _is_bare_day_reply(message):
         drafts = await extract_exercises(message)
         if drafts:
             draft = drafts[0]
             slots.exercise = draft.exercise.strip() or None
-            slots.set_count = draft.set_count or None
-            slots.rep_count = draft.rep_count or None
-            slots.kg_weight = draft.kg_weight or None
             slots.equipment_name = (draft.equipment_name or "").strip() or None
-
-    patch = fallback_patch_from_message(message)
-    if patch is not None:
-        slots.set_count = slots.set_count or patch.set_count
-        slots.rep_count = slots.rep_count or patch.rep_count
-        slots.kg_weight = slots.kg_weight or patch.kg_weight
-    grid = SETS_X_REPS_PATTERN.search(message)
-    if grid:
-        slots.set_count = slots.set_count or int(grid.group(1))
-        slots.rep_count = slots.rep_count or int(grid.group(2))
+            slots.sets = [
+                ExerciseSetCreate(
+                    rep_count=draft_set.rep_count,
+                    kg_weight=draft_set.kg_weight,
+                    notes=draft_set.notes,
+                )
+                for draft_set in draft.sets
+                if draft_set.rep_count > 0
+            ]
+    if not slots.sets:
+        slots.sets = _uniform_sets(message)
     return slots
 
 
 def _merge_slots(old: NewExerciseSlots, new: NewExerciseSlots) -> NewExerciseSlots:
-    """Newer numbers win. The name is kept once set unless the new message is a full
-    form submit (it has sets), so a loose reply can't overwrite it."""
+    """Newer sets and equipment win. The name is kept once set unless the new message
+    is a full form submit (it has sets), so a loose reply can't overwrite it."""
     merged = old.model_copy()
-    for field in ("set_count", "rep_count", "kg_weight", "equipment_name"):
-        value = getattr(new, field)
-        if value is not None:
-            setattr(merged, field, value)
-    if new.exercise and (merged.exercise is None or new.set_count is not None):
+    if new.sets:
+        merged.sets = new.sets
+    if new.equipment_name:
+        merged.equipment_name = new.equipment_name
+    if new.exercise and (merged.exercise is None or new.sets):
         merged.exercise = new.exercise
     return merged
 
@@ -105,7 +120,8 @@ def _missing_directive(day: str, missing: list[str]) -> str:
         f"Adding an exercise to {day}. Still missing: {listed}.\n"
         "The chat UI shows an exercise form directly below your message, pre-filled with "
         "what the user already gave. In 1-2 short sentences, tell them to fill in the "
-        "remaining fields in the form (weight and equipment are optional). "
+        "remaining fields in the form: the sets, each with its own reps and weight "
+        "(equipment is optional). "
         "Do NOT list the fields as questions. Do NOT call tools. "
         "Do NOT start scheduling. Do NOT claim it was added."
     )
@@ -122,12 +138,13 @@ def _duplicate_directive(day: str, name: str) -> str:
 
 def _added_directive(result: dict) -> str:
     exercise = result.get("exercise") or {}
-    details = []
-    if exercise.get("set_count") is not None and exercise.get("rep_count") is not None:
-        details.append(f"{exercise['set_count']}x{exercise['rep_count']}")
-    if exercise.get("kg_weight"):
-        details.append(f"{exercise['kg_weight']}kg")
-    summary = f" ({', '.join(details)})" if details else ""
+    parts = []
+    for saved_set in exercise.get("exercise_sets") or []:
+        piece = f"{saved_set.get('rep_count')} reps"
+        if saved_set.get("kg_weight"):
+            piece += f" @ {saved_set['kg_weight']}kg"
+        parts.append(piece)
+    summary = f" ({len(parts)} sets: {'; '.join(parts)})" if parts else ""
     return (
         f"{DIRECTIVE_HEADER}\n"
         "An exercise was already added to the saved workout. Do NOT call tools. "
@@ -178,12 +195,11 @@ async def _decide(
 
     missing = [
         label
-        for label, value in (
-            ("exercise name", slots.exercise),
-            ("number of sets", slots.set_count),
-            ("number of reps", slots.rep_count),
+        for label, filled in (
+            ("exercise name", bool(slots.exercise)),
+            ("at least one set (reps and weight)", bool(slots.sets)),
         )
-        if value is None
+        if not filled
     ]
     if missing:
         return waiting(_missing_directive(day, missing))
@@ -199,16 +215,13 @@ async def _decide(
     try:
         exercise = WorkoutExerciseCreate(
             exercise=name,
-            set_count=slots.set_count,
-            rep_count=slots.rep_count,
-            kg_weight=slots.kg_weight,
             equipment_name=slots.equipment_name,
+            sets=slots.sets,
         )
     except Exception as exc:
         logger.warning("Invalid new exercise %s: %s", slots, exc)
-        return waiting(
-            _missing_directive(day, ["valid sets and reps (each between 1 and 99)"])
-        )
+        slots.sets = []
+        return waiting(_missing_directive(day, ["valid sets (reps and weight)"]))
 
     result = await add_exercise_to_day(db, user_id, day, exercise)
     if not result.get("added"):
@@ -224,7 +237,7 @@ async def prepare_exercise_add_turn(
     user_message: str,
     user_intent: UserIntentResult | None = None,
 ) -> ExerciseEditTurnPlan:
-    """Slot-fill adding an exercise to a saved workout (day, name, sets, reps).
+    """Slot-fill adding an exercise to a saved workout (day, name, sets).
 
     Slots persist on state.pending_exercise_edit (mode "add") across turns. The DB
     write happens only once every required slot is filled.
@@ -255,8 +268,8 @@ async def prepare_exercise_add_turn(
                 ),
                 user_intent=user_intent,
             )
-        # The exercise form submit ("Wrist Curls — 2 sets × 20 reps @ 12kg") reads like an
-        # update_saved_exercise, so only an explicit scheduling request abandons the add.
+        # The exercise form submit reads like an update_saved_exercise, so only an
+        # explicit scheduling request abandons the add.
         if not starting and user_intent.intent == "schedule_workout":
             logger.info("Dropping pending add; user switched to scheduling")
             state.pending_exercise_edit = None
