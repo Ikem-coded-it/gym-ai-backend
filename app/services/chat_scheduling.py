@@ -14,6 +14,7 @@ from app.schemas.scheduling_state import (
     SchedulingDraft,
     SchedulingState,
 )
+from app.services.exercise_suggestion import format_review_summary, suggest_exercises
 from app.services.workout import get_workout_for_day
 from langchain_core.messages import AIMessage
 
@@ -298,6 +299,21 @@ SUGGEST_EXERCISES_DIRECTIVE = (
     "then show a review summary and ask for confirmation. Do NOT ask them to fill the form."
 )
 SLOT_CONFIDENCE_THRESHOLD = 0.8
+
+
+def suggested_plan_directive(state: SchedulingState) -> str:
+    summary = format_review_summary(
+        state.draft.day, state.draft.muscle_group, state.draft.exercises
+    )
+    return (
+        f"{DIRECTIVE_HEADER}\n"
+        "The user chose Suggest a plan. The knowledge base was already searched for their "
+        "muscle groups and this plan was built: at least two exercises per muscle group, "
+        "2 sets of 10 reps each. Do NOT call tools. Do NOT change, add or remove anything.\n"
+        "Reply with one short intro sentence, then the plan below EXACTLY as written, "
+        "then: Reply **confirm** to save, or **edit** to change it.\n\n"
+        f"{summary}"
+    )
 
 
 @dataclass
@@ -621,6 +637,17 @@ async def prepare_scheduling_turn(
             )
         if SUGGEST_PATTERN.match(user_message.strip()):
             logger.info("User requested exercise suggestions via composer")
+            suggested = await suggest_exercises(state.draft.muscle_group)
+            if suggested:
+                # Plan comes straight from the knowledge base; go to review so the
+                # Confirm / Edit composer shows (Edit opens the form prefilled).
+                state.draft.exercises = suggested
+                state.step = "review"
+                return SchedulingTurnPlan(
+                    state=state,
+                    directive=suggested_plan_directive(state),
+                    user_intent=user_intent,
+                )
             return SchedulingTurnPlan(
                 state=state,
                 directive=SUGGEST_EXERCISES_DIRECTIVE,

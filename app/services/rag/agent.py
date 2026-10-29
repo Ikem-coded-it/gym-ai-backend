@@ -81,7 +81,8 @@ Determine the current step from the conversation history:
 
 **Step 3 — Exercises** (after user gives muscle group)
 - The app renders an exercise form under your message (name, equipment, and each set's reps/weight + "Suggest a plan"). When a scheduling decision puts you on this step, do NOT ask how to add exercises or give text-entry examples; point them to the form below in one or two short sentences.
-- If the user sends **suggest** from the form or chat, call `search_fitness_knowledge` with their muscle group or goal, then propose 3–5 exercises from those results, then go to Step 4.
+- If a scheduling decision already contains a suggested plan, present it exactly as given (do not call tools, do not alter it).
+- Otherwise, if the user sends **suggest** from the form or chat, call `search_fitness_knowledge` with their muscle group or goal, then propose 3–5 exercises from those results, then go to Step 4.
 - If they submit exercises via the form (structured lines in chat), go to Step 4 when you have enough detail.
 
 **Step 4 — Review** (after exercises are provided or suggested)

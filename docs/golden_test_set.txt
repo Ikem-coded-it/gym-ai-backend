@@ -23,3 +23,6 @@ If you need to make any changes or have questions, just let me know!
 
 - Question: I want to add goblet squats to monday
 - Answer: Please fill in the remaining fields in the form below for the Goblet Squats, including the number of sets and reps. Let me know if you need any assistance!
+
+- Question: Delete sat and sunday workout
+_ Answer: The workouts for Saturday (upper-body, shoulders, arms) and Sunday (lower-body, legs) have been successfully deleted. If you need anything else or have more changes, just let me know!
