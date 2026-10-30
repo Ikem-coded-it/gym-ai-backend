@@ -8,7 +8,7 @@ from app.schemas.user import UserPublic, UserUpdate, UserPrivate
 from app.models.user import User as user_model
 from app.db import get_db
 
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import CurrentUser
@@ -31,7 +31,7 @@ async def update_user(
     user_update: UserUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if user_id != current_user.id:
+    if str(user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this user",
@@ -92,7 +92,7 @@ async def delete_user(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if user_id != current_user.id:
+    if str(user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this user",
@@ -106,5 +106,9 @@ async def delete_user(
             detail="User not found",
         )
 
-    await db.delete(user)
+    # Core delete: the database cascades to the user's workouts, exercises, sets,
+    # conversations and messages. (db.delete(user) would try to load those
+    # relationships lazily, which async sessions can't do.)
+    await db.execute(delete(user_model).where(user_model.id == user.id))
     await db.commit()
+    logger.info(f"Deleted account for user: {user_id}")
