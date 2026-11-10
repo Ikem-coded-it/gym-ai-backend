@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from typing import Annotated, HTTPException
+from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.middlewares.exception_handlers import catch_exceptions_middleware
 from app.router import chat, auth, user, workout, onboarding
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db import engine, get_db
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -34,3 +37,14 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(user.router, prefix="/api/user", tags=["user"])
 app.include_router(workout.router, prefix="/api/workout", tags=["workout"])
 app.include_router(onboarding.router, prefix="/api/onboarding", tags=["onboarding"])
+
+@app.get("/health")
+async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
+    return {"status": "healthy"}
