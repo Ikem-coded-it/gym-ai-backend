@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
-from typing import Annotated, HTTPException
-from fastapi import Depends, FastAPI, status
+from typing import Annotated
+from fastapi import Depends, FastAPI, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.middlewares.exception_handlers import catch_exceptions_middleware
 from app.router import chat, auth, user, workout, onboarding
