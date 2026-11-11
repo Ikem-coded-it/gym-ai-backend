@@ -39,4 +39,5 @@ class Workout(Base):
         back_populates="workout",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        order_by=lambda: (WorkoutExercise.position, WorkoutExercise.created_at),
     )

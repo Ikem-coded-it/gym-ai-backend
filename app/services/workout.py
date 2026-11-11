@@ -4,7 +4,7 @@ from uuid import UUID
 from app.models.workout import Workout as workout_model
 from app.models.workout_exercise import WorkoutExercise as workout_exercise_model
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from app.schemas.exercise_edit import DayExerciseRow
 from app.schemas.workout import WorkoutCreate, WorkoutResponse, WorkoutWithExercisesResponse
@@ -33,10 +33,12 @@ def _exercises_loader():
 def build_workout_exercise(
     workout_id: str,
     exercise: WorkoutExerciseCreate | WorkoutExerciseAdd,
+    position: int = 0,
 ) -> workout_exercise_model:
-    """Exercise row with one ExerciseSet per entry in `exercise.sets`."""
+    """Exercise row (at `position` in its workout) with one ExerciseSet per entry in `exercise.sets`."""
     return workout_exercise_model(
         workout_id=workout_id,
+        position=position,
         exercise=exercise.exercise.strip(),
         equipment_name=exercise.equipment_name,
         exercise_sets=[
@@ -100,8 +102,8 @@ async def create_workout(db: AsyncSession, workout: WorkoutCreate, user_id: str)
     await db.flush()
     if workout.exercises:
         db.add_all(
-            build_workout_exercise(new_workout.id, exercise)
-            for exercise in workout.exercises
+            build_workout_exercise(new_workout.id, exercise, position)
+            for position, exercise in enumerate(workout.exercises)
         )
     await db.commit()
     await db.refresh(new_workout)
@@ -183,8 +185,8 @@ async def create_workout_with_exercises(
     await db.refresh(new_workout)
 
     db.add_all(
-        build_workout_exercise(new_workout.id, exercise)
-        for exercise in schedule.exercises
+        build_workout_exercise(new_workout.id, exercise, position)
+        for position, exercise in enumerate(schedule.exercises)
     )
     await db.commit()
 
@@ -251,12 +253,25 @@ async def _load_exercise(
     return result.scalar_one_or_none()
 
 
+async def _next_position(db: AsyncSession, workout_id: str) -> int:
+    """Position that puts a new exercise after every existing one in the workout."""
+    result = await db.execute(
+        select(func.max(workout_exercise_model.position)).where(
+            workout_exercise_model.workout_id == workout_id
+        )
+    )
+    highest = result.scalar_one_or_none()
+    return 0 if highest is None else highest + 1
+
+
 async def _insert_exercise(
     db: AsyncSession,
     workout: workout_model,
     exercise: WorkoutExerciseCreate,
 ) -> workout_exercise_model:
-    new_exercise = build_workout_exercise(workout.id, exercise)
+    new_exercise = build_workout_exercise(
+        workout.id, exercise, await _next_position(db, workout.id)
+    )
     db.add(new_exercise)
     await db.commit()
     loaded = await _load_exercise(db, new_exercise.id)
@@ -280,12 +295,62 @@ async def add_exercise_to_workout(
     if workout is None:
         return None
 
-    new_exercise = build_workout_exercise(workout.id, exercise)
+    new_exercise = build_workout_exercise(
+        workout.id, exercise, await _next_position(db, workout.id)
+    )
     db.add(new_exercise)
     await db.commit()
     loaded = await _load_exercise(db, new_exercise.id)
     assert loaded is not None
     return WorkoutExerciseResponse.model_validate(loaded)
+
+
+async def reorder_workout_exercises(
+    db: AsyncSession,
+    user_id: str,
+    workout_id: str,
+    exercise_ids: list[str],
+) -> list[WorkoutExerciseResponse] | None:
+    """Put an owned workout's exercises in the given order.
+
+    `exercise_ids` must list every exercise of the workout exactly once. Returns None
+    when the workout isn't the user's; raises ValueError when the ids don't match.
+    """
+    result = await db.execute(
+        select(workout_model)
+        .where(workout_model.id == workout_id)
+        .where(workout_model.user_id == user_id)
+        .options(_exercises_loader())
+    )
+    workout = result.scalar_one_or_none()
+    if workout is None:
+        return None
+
+    by_id = {str(exercise.id): exercise for exercise in workout.exercises}
+    requested = [str(exercise_id) for exercise_id in exercise_ids]
+    if set(requested) != set(by_id) or len(requested) != len(by_id):
+        raise ValueError(
+            "exercise_ids must list every exercise in this workout exactly once."
+        )
+
+    now = datetime.now(UTC)
+    for position, exercise_id in enumerate(requested):
+        exercise = by_id[exercise_id]
+        if exercise.position != position:
+            exercise.position = position
+            exercise.updated_at = now
+    await db.commit()
+
+    refreshed = await db.execute(
+        select(workout_model)
+        .where(workout_model.id == workout_id)
+        .options(_exercises_loader())
+        .execution_options(populate_existing=True)
+    )
+    return [
+        WorkoutExerciseResponse.model_validate(exercise)
+        for exercise in refreshed.scalar_one().exercises
+    ]
 
 
 async def delete_exercise_from_workout(

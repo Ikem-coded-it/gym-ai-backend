@@ -11,13 +11,18 @@ from app.schemas.exercise_set import (
     ExerciseSetResponse,
     ExerciseSetUpdate,
 )
-from app.schemas.workout_exercise import WorkoutExerciseAdd, WorkoutExerciseResponse
+from app.schemas.workout_exercise import (
+    WorkoutExerciseAdd,
+    WorkoutExerciseOrderUpdate,
+    WorkoutExerciseResponse,
+)
 from app.services.workout import (
     add_exercise_to_workout,
     add_set_to_exercise,
     create_workout as create_workout_service,
     delete_exercise_from_workout,
     delete_exercise_set,
+    reorder_workout_exercises,
     update_exercise_set,
     delete_workout as delete_workout_service,
     list_workouts as list_workouts_service,
@@ -90,6 +95,42 @@ async def add_workout_exercise(
             detail="Workout not found",
         )
     return created
+
+
+@router.put(
+    "/{workout_id}/exercises/order",
+    response_model=list[WorkoutExerciseResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Reorder a workout's exercises",
+    description=(
+        "Set the order the exercises are done in. Send every exercise id of the "
+        "workout, first to last. Returns the exercises in their new order."
+    ),
+)
+async def reorder_workout_exercise_list(
+    workout_id: str,
+    order: WorkoutExerciseOrderUpdate,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        reordered = await reorder_workout_exercises(
+            db,
+            str(current_user.id),
+            workout_id,
+            [str(exercise_id) for exercise_id in order.exercise_ids],
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    if reordered is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workout not found",
+        )
+    return reordered
 
 
 @router.delete(

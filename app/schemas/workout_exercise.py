@@ -49,6 +49,7 @@ class WorkoutExerciseResponse(BaseModel):
     workout_id: UUID
     exercise: str
     equipment_name: Optional[str] = None
+    position: int = 0
     created_at: datetime
     updated_at: datetime
     exercise_sets: list[ExerciseSetResponse] = Field(default_factory=list)
@@ -68,3 +69,15 @@ class WorkoutExerciseResponse(BaseModel):
     @property
     def kg_weight(self) -> Optional[float]:
         return self.exercise_sets[0].kg_weight if self.exercise_sets else None
+
+
+class WorkoutExerciseOrderUpdate(BaseModel):
+    """New order for a workout's exercises: every exercise id, first to last."""
+
+    exercise_ids: list[UUID] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def no_duplicates(self) -> Self:
+        if len(set(self.exercise_ids)) != len(self.exercise_ids):
+            raise ValueError("exercise_ids must not contain duplicates")
+        return self

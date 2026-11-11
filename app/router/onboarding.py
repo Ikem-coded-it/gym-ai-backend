@@ -54,9 +54,9 @@ async def create_onboarding_workouts(onboarding_data: OnboardingCreate, current_
         await db.refresh(new_workout)
         new_workouts.append(new_workout)
 
-        for exercise in data.exercises:
+        for position, exercise in enumerate(data.exercises):
             new_workout_exercises.append(
-                build_workout_exercise(new_workout.id, exercise)
+                build_workout_exercise(new_workout.id, exercise, position)
             )
 
     db.add_all(new_workout_exercises)
