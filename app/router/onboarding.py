@@ -7,7 +7,7 @@ from app.schemas.onboarding import (
     OnboardingResponse,
 )
 from app.schemas.workout import WorkoutResponse
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.logger import logger
 from app.models.workout import Workout as workout_model
@@ -106,3 +106,24 @@ async def generate_onboarding_routine(
             detail="Could not generate a routine right now. Please try again.",
         )
     return GenerateRoutineResponse(exercises=exercises)
+
+
+
+@router.post(
+    "/skip",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Skip onboarding",
+    description=(
+        "Mark the user as onboarded without creating any workouts, so they are not "
+        "sent back to onboarding the next time they sign in."
+    ),
+)
+async def skip_onboarding(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not current_user.has_onboarded:
+        current_user.has_onboarded = True
+        await db.commit()
+        logger.info(f"Onboarding skipped by user: {current_user.id}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -29,6 +29,7 @@ class UserPublic(BaseModel):
     updated_at: datetime
     
 class UserPrivate(UserPublic):
+    id: UUID
     email: EmailStr = Field(unique=True, max_length=120)
     has_onboarded: bool
     password_hash: str = Field(min_length=8, max_length=200)
