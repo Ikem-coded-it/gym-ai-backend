@@ -90,8 +90,9 @@ async def generate_onboarding_routine(
             equipment_name=draft.equipment_name,
             sets=[
                 ExerciseSetCreate(
-                    rep_count=draft_set.rep_count,
+                    rep_count=draft_set.rep_count or None,
                     kg_weight=draft_set.kg_weight,
+                    duration_seconds=draft_set.duration_seconds,
                     notes=draft_set.notes,
                 )
                 for draft_set in draft.sets

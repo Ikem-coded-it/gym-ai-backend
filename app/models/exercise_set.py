@@ -26,6 +26,8 @@ class ExerciseSet(Base):
     )
     rep_count: Mapped[float] = mapped_column(Float, nullable=True)
     kg_weight: Mapped[float] = mapped_column(Float, nullable=True)
+    # Time for holds such as a plank, in seconds. A set has reps, a duration, or both.
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

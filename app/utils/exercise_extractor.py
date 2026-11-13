@@ -26,7 +26,9 @@ For each exercise:
 - exercise: the movement name
 - equipment_name: equipment if mentioned, otherwise null
 - sets: one entry per set, in order. Each set has:
-  - rep_count: integer reps (0 if missing)
+  - rep_count: integer reps (0 if missing, and 0 for a timed hold)
+  - duration_seconds: seconds held, for timed exercises such as a plank or wall sit
+    ("60 seconds", "1 min" = 60). null for exercises counted in reps.
   - kg_weight: kilograms as a number. Use 0 or null for bodyweight / no added load.
   - notes: a short note for that set if given, otherwise null
 - When the text gives one plan for all sets, such as "3 sets x 10 reps @ 60kg" or "3x10", expand it
@@ -35,7 +37,7 @@ For each exercise:
 - When only the exercise name is given with no set details, return an empty sets list.
 
 Return JSON only. No explanation.
-Example: {{"exercises": [{{"exercise": "Squats", "equipment_name": "barbell", "sets": [{{"rep_count": 10, "kg_weight": 100, "notes": null}}, {{"rep_count": 8, "kg_weight": 110, "notes": null}}]}}]}}
+Example: {{"exercises": [{{"exercise": "Squats", "equipment_name": "barbell", "sets": [{{"rep_count": 10, "kg_weight": 100, "duration_seconds": null, "notes": null}}, {{"rep_count": 8, "kg_weight": 110, "duration_seconds": null, "notes": null}}]}}, {{"exercise": "Plank", "equipment_name": "bodyweight", "sets": [{{"rep_count": 0, "kg_weight": 0, "duration_seconds": 60, "notes": null}}]}}]}}
 """,
     ),
     ("human", "Text:\n{message}"),

@@ -167,7 +167,7 @@ async def delete_workout_exercise(
     response_model=ExerciseSetResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Add a set to an exercise",
-    description="Append a set (reps, weight, optional notes) to an exercise owned by the current user",
+    description="Append a set (reps and/or duration, optional weight and notes) to an exercise owned by the current user",
 )
 async def add_exercise_set(
     workout_id: str,
@@ -192,7 +192,7 @@ async def add_exercise_set(
     response_model=ExerciseSetResponse,
     status_code=status.HTTP_200_OK,
     summary="Update a set",
-    description="Change the reps, weight or notes of one set",
+    description="Change the reps, duration, weight or notes of one set",
 )
 async def update_set(
     workout_id: str,
@@ -202,9 +202,15 @@ async def update_set(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    updated = await update_exercise_set(
-        db, str(current_user.id), workout_id, exercise_id, set_id, patch
-    )
+    try:
+        updated = await update_exercise_set(
+            db, str(current_user.id), workout_id, exercise_id, set_id, patch
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     if updated is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

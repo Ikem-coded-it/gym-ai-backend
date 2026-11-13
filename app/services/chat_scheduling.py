@@ -166,8 +166,9 @@ def composer_for_pending_edit(state: SchedulingState) -> ChatComposer | None:
                     equipment_name=slots.equipment_name,
                     sets=[
                         ExerciseSetDraft(
-                            rep_count=new_set.rep_count,
+                            rep_count=new_set.rep_count or 0,
                             kg_weight=new_set.kg_weight,
+                            duration_seconds=new_set.duration_seconds,
                             notes=new_set.notes,
                         )
                         for new_set in slots.sets

@@ -10,12 +10,22 @@ from typing import Self
 class ExerciseSetBase(BaseModel):
     rep_count: Optional[int] = Field(default=None, ge=0, lt=1000)
     kg_weight: Optional[float] = Field(default=None, ge=0, lt=1000)
+    # Seconds held, for timed exercises like a plank (under 24 hours).
+    duration_seconds: Optional[int] = Field(default=None, ge=0, lt=86400)
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
-# Create — a single set of an exercise
+def has_reps_or_duration(rep_count: Optional[int], duration_seconds: Optional[int]) -> bool:
+    return bool(rep_count) or bool(duration_seconds)
+
+
+# Create — a single set: counted in reps, held for a time, or both
 class ExerciseSetCreate(ExerciseSetBase):
-    rep_count: int = Field(ge=0, lt=1000)
+    @model_validator(mode="after")
+    def reps_or_duration(self) -> Self:
+        if not has_reps_or_duration(self.rep_count, self.duration_seconds):
+            raise ValueError("A set needs reps or a duration")
+        return self
 
 
 # Update — partial patch; at least one field is required

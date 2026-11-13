@@ -71,10 +71,11 @@ async def _extract_slots(message: str) -> NewExerciseSlots:
                 ExerciseSetCreate(
                     rep_count=draft_set.rep_count,
                     kg_weight=draft_set.kg_weight,
+                    duration_seconds=draft_set.duration_seconds,
                     notes=draft_set.notes,
                 )
                 for draft_set in draft.sets
-                if draft_set.rep_count > 0
+                if draft_set.rep_count > 0 or (draft_set.duration_seconds or 0) > 0
             ]
     if not slots.sets:
         slots.sets = _uniform_sets(message)
@@ -140,7 +141,10 @@ def _added_directive(result: dict) -> str:
     exercise = result.get("exercise") or {}
     parts = []
     for saved_set in exercise.get("exercise_sets") or []:
-        piece = f"{saved_set.get('rep_count')} reps"
+        if saved_set.get("rep_count"):
+            piece = f"{saved_set['rep_count']} reps"
+        else:
+            piece = f"{saved_set.get('duration_seconds')}s hold"
         if saved_set.get("kg_weight"):
             piece += f" @ {saved_set['kg_weight']}kg"
         parts.append(piece)

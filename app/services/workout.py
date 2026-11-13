@@ -17,6 +17,7 @@ from app.schemas.workout_exercise import (
 from app.schemas.workout_schedule import WorkoutScheduleCreate
 from app.models.exercise_set import ExerciseSet as exercise_set_model
 from app.schemas.exercise_set import (
+    has_reps_or_duration,
     ExerciseSetCreate,
     ExerciseSetResponse,
     ExerciseSetUpdate,
@@ -45,6 +46,7 @@ def build_workout_exercise(
             exercise_set_model(
                 rep_count=new_set.rep_count,
                 kg_weight=new_set.kg_weight,
+                duration_seconds=new_set.duration_seconds,
                 notes=new_set.notes,
             )
             for new_set in exercise.sets
@@ -387,6 +389,7 @@ async def add_set_to_exercise(
         workout_exercise_id=exercise.id,
         rep_count=new_set.rep_count,
         kg_weight=new_set.kg_weight,
+        duration_seconds=new_set.duration_seconds,
         notes=new_set.notes,
     )
     db.add(row)
@@ -423,14 +426,19 @@ async def update_exercise_set(
     set_id: str,
     patch: ExerciseSetUpdate,
 ) -> ExerciseSetResponse | None:
-    """Patch one set's reps, weight or notes. None when it isn't found."""
+    """Patch one set's reps, duration, weight or notes. None when it isn't found.
+
+    Raises ValueError if the change would leave the set with neither reps nor a duration.
+    """
     row = await _get_owned_set(db, user_id, workout_id, exercise_id, set_id)
     if row is None:
         return None
     for field, value in patch.model_dump(exclude_unset=True).items():
-        if field == "rep_count" and value is None:
-            continue  # reps can be cleared only by deleting the set
         setattr(row, field, value)
+    # Clearing reps is fine for a timed set (and the reverse), but a set can't end up with neither.
+    if not has_reps_or_duration(row.rep_count, row.duration_seconds):
+        await db.rollback()
+        raise ValueError("A set needs reps or a duration.")
     row.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(row)
@@ -558,6 +566,7 @@ async def update_exercise_for_day(
                 workout_exercise_id=exercise.id,
                 rep_count=template.rep_count if template else None,
                 kg_weight=template.kg_weight if template else None,
+                duration_seconds=template.duration_seconds if template else None,
             )
             db.add(new_row)
             sets.append(new_row)

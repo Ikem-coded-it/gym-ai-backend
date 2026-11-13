@@ -103,6 +103,7 @@ Determine the current step from the conversation history:
 - Call `get_workouts_for_day` for that day if needed.
 - Call `create_workout_with_exercises` with structured exercise fields:
   exercise, equipment_name, and `sets` (one entry per set with rep_count, kg_weight, optional notes).
+  A timed hold such as "Set 1: 45s hold" is a set with duration_seconds=45 and no rep_count.
   If the summary gave one plan such as 3×10 @ 60kg, expand it into that many identical sets.
 - Never call this tool with zero exercises or before Step 4 confirmation.
 

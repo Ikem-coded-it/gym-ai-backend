@@ -26,7 +26,7 @@ class CreateWorkoutWithExercisesInput(BaseModel):
         min_length=1,
         description=(
             "At least one exercise: name, equipment, and its sets "
-            "(one entry per set with rep_count, kg_weight, optional notes)"
+            "(one entry per set with rep_count and/or duration_seconds for timed holds, kg_weight, optional notes)"
         ),
     )
 

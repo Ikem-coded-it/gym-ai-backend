@@ -18,10 +18,11 @@ ScheduleFlow = Literal["idle", "schedule_workout"]
 
 
 class ExerciseSetDraft(BaseModel):
-    """One set on a draft exercise. rep_count 0 means not filled in yet."""
+    """One set on a draft exercise. rep_count 0 with no duration means not filled in yet."""
 
     rep_count: int = 0
     kg_weight: float | None = None
+    duration_seconds: int | None = None
     notes: str | None = None
 
 

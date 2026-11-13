@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     postgres_port: str
     secret_key: SecretStr #auth secret key
     algorithm: str #auth hashing algorithm
-    access_token_expire_minutes: int = 30 #auth access token expiration time
+    access_token_expire_minutes: int = 10080 #auth access token expiration time
     
 
 

@@ -46,6 +46,15 @@ class SuggestedExercise(BaseModel):
         lt=1000,
         description="Reasonable working weight in kg for 10 reps. 0 for bodyweight.",
     )
+    duration_seconds: int | None = Field(
+        default=None,
+        ge=5,
+        lt=3600,
+        description=(
+            "Only for timed holds (plank, wall sit, dead hang, hollow hold): seconds to hold "
+            "each set, e.g. 30-60. null for every exercise counted in reps."
+        ),
+    )
 
 
 class SuggestedPlan(BaseModel):
@@ -68,7 +77,10 @@ Rules:
   upper-body = chest, back, shoulders and arms, lower-body = legs, full-body = legs, chest, back and shoulders.
 - Set muscle_group on every exercise to one of the requested groups, exactly as written.
 - Do not repeat an exercise.
-- Each exercise will be done for {sets} sets of {reps} reps. For each one give kg_weight:
+- Timed holds (plank, side plank, wall sit, dead hang, hollow hold) are not counted in reps:
+  give them duration_seconds (a sensible hold time, usually 30-60) and kg_weight 0. Every
+  other exercise leaves duration_seconds null.
+- Each exercise will be done for {sets} sets (of {reps} reps unless it is a timed hold). For each one give kg_weight:
   a reasonable working weight in kg for 10 reps for an intermediate lifter. For dumbbell
   exercises give the weight of ONE dumbbell. Bodyweight exercises (pull-up, plank, dip) use 0.
 - equipment_name: the main equipment, e.g. barbell, dumbbell, cable, machine, bodyweight.
@@ -186,9 +198,11 @@ async def suggest_exercises(muscle_group: str | None) -> list[ExerciseDraft]:
                 exercise=name,
                 equipment_name=(item.equipment_name or "").strip() or None,
                 sets=[
+                    # A timed hold has a duration and no reps; everything else is 10 reps.
                     ExerciseSetDraft(
-                        rep_count=SUGGESTED_REP_COUNT,
+                        rep_count=0 if item.duration_seconds else SUGGESTED_REP_COUNT,
                         kg_weight=item.kg_weight or 0,
+                        duration_seconds=item.duration_seconds or None,
                     )
                     for _ in range(SUGGESTED_SET_COUNT)
                 ],
@@ -216,7 +230,9 @@ def format_review_summary(
         lines.append(f"• {exercise.exercise}{equipment}")
         for index, exercise_set in enumerate(exercise.sets, start=1):
             weight = exercise_set.kg_weight or 0
-            lines.append(
-                f"  Set {index}: {exercise_set.rep_count} reps @ {weight:g}kg"
-            )
+            if exercise_set.rep_count:
+                effort = f"{exercise_set.rep_count} reps @ {weight:g}kg"
+            else:
+                effort = f"{exercise_set.duration_seconds or 0}s hold"
+            lines.append(f"  Set {index}: {effort}")
     return "\n".join(lines)
